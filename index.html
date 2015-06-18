@@ -1,64 +1,63 @@
 <!DOCTYPE html>
-<!-- saved from url=(0044)http://cs.wellesley.edu/~fturbak/ai1convert/ -->
 <html style=""><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta charset="utf-8">
     <title>AI1 to AI2 Converter</title>
-    <link rel="stylesheet" href="http://cs.wellesley.edu/~fturbak/ai1convert/ai1Convert.css">
+    <link rel="stylesheet" href="ai1Convert.css">
     <!-- <link rel="stylesheet" href="../default.css">
     <link rel="stylesheet" href="demo.css">
     <link href='http://fonts.googleapis.com/css?family=Maven+Pro|Muli|Droid+Sans+Mono|Istok+Web' rel='stylesheet' type='text/css'>
     -->
-  <style type="text/css"></style><link rel="stylesheet" type="text/css" href="chrome-extension://pkehgijcmpdhfbdbbnkijodmdjhbjlgp/skin/socialwidgets.css"></head>
-
   <body>
     <div id="container">
-      <h1>AI1 to AI2 Converter (Version <span id="versionNumber">0.3</span>)</h1>
+      <h1>AI1 to AI2 Converter (Version <span id="versionNumber">1</span>)</h1>
 
       <h2>Convert a Project from App Inventor Classic to AI2</h2>
 
       <p><button id="instructionsButton" class="converterButton">Show Instructions</button>
 
       </p><div id="instructions" style="display: none;">
-      <p class="note">This is a first crude pass at instructions. There will be better wording and some
-      images soon. Suggestions welcome!</p>
       <ol>
-        <li> In the <a href="http://beta.appinventor.mit.edu/">App Inventor Classic (AI1) development environment</a>,
+        <li> In the <a href="http://beta.appinventor.mit.edu/">App Inventor Classic (AI1) development environment</a>, 
              load the project you wish to convert, and confirm that you can view it in both the Designer
              window and Blocks Editor. Ideally, you should also confirm that the program works as expected
-             by testing it on an Android device or an emulator.
-
+             by testing it on an Android device or an emulator. 
+          
         </li><li> Save the AI1 project you wish to convert as a <code>.zip</code> file as follows:
           <ol>
              <li> Use <strong>My Projects</strong> to list your projects;
              </li><li> Click the checkbox of the project you wish to save
-             </li><li> Select <strong>More Options&gt;Download Source</strong>.
-                  This will download an AI1 project source <code>.zip</code> file to your computer.
+             </li><li> Select <strong>More Options&gt;Download Source</strong>.       
+                  This will download an AI1 project source <code>.zip</code> file to your computer. 
           </li></ol>
              <strong>Important:</strong> do not attempt to open or uncompress the <code>.zip</code> file in any way.
-             Some computers and browsers (especially Safari) may be configured to automatically open
+             Some computers and browsers (especially Safari) may be configured to automatically open 
              and uncompress the <code>.zip</code> file. In this case, you will need to configure preferences to turn
              off this feature.
 
-        </li><li> Use the <strong>Choose File</strong> button below to navigate to the <code>.zip</code> file
-             you just downloaded. Selecting the file will automatically convert your AI1 <code>.zip</code> project file
-             to an AI2 <code>.aia</code> project file and and download the <code>.aia</code> file
-             to your computer. If errors are reported in the red-outlined error box,
-             see the Troubleshooting section below.
+        </li><li> Use the <strong>Choose File</strong> button below to navigate to the <code>.zip</code> file 
+             you just downloaded. Selecting the file will automatically convert your AI1 <code>.zip</code> project file  
+             to an AI2 <code>.aia</code> project file and and download the <code>.aia</code> file  
+             to your computer. If errors are reported in the red-outlined error box, 
+             see the Troubleshooting section below. 
 
-        </li><li> In the <a href="http://ai2.appinventor.mit.edu/">AI2 development environment</a>,
+        </li><li> In the <a href="http://ai2.appinventor.mit.edu/">AI2 development environment</a>, 
               use <strong>Projects&gt;Import project (.aia) from my computer</strong>
               to upload the <code>.aia</code> project file. You can now run and edit your project in AI2!
 
-             <p>If the <code>.aia</code> project cannot be loaded into AI2, or if the uploaded project does
-             not work as you expect, see the Troubleshooting section below.
+             <p>If the <code>.aia</code> project cannot be loaded into AI2, or if the uploaded project does 
+             not work as you expect, see the Troubleshooting section below. 
 
       </p></li></ol>
 
-     </div> <!-- end instructions -->
+     </div> <!-- end instructions --> 
 
       <p id="formInput"><span class="form-label">Choose an AI source file (.zip) to convert:</span>
-      <input type="file" accept="application/zip" id="file-input"><br>
-      <span id="conversionFeedback"></span>
+      <input type="file" accept="application/zip" id="file-input">
+      <button id="cancelButton" class="converterButton" disabled="">Cancel Conversion</button>
+      <br>
+      <span id="conversionFeedbackInitial"></span>
+      <span id="conversionFeedbackProgress"></span>
+      <span id="conversionFeedbackFinal"></span>
 
       <!--
       <p><span class="form-label">download the zip file</span>
@@ -67,83 +66,94 @@
 
       </p><div id="errorBox">
       <p id="errorTitle">Any errors or warnings from the conversion process will be displayed in this box.</p>
-        <div id="errors"></div> <!-- place for error items -->
+        <div id="errors"></div> <!-- place for error items --> 
       </div>
 
       <p><button id="troubleshootingButton" class="converterButton">Show Troubleshooting Hints</button>
 
       </p><div id="troubleshooting" style="display: none;">
-      <p class="note">Suggestions welcome on improving this wording.</p>
+      <!--<p class="note">Suggestions welcome on improving this wording.</p> -->
       <ul>
         <li> If there are red error boxes above, something went wrong in the conversion process,
-             and you should report this error <strong>(how?)</strong>.
+             and you should report this error via email to <a href="mailto:fturbak@wellesley.edu">fturbak@wellesley.edu</a>.
+             Please attach your <code>.zip</code> file to your email. 
         </li><li> If there are orange error boxes above, there is a problem with your project that
-             you need to fix before it can be converted.
+             you need to fix before it can be converted. 
         </li><li> If there are yellow warning boxes above, your converted project <strong>might</strong> be fine, but
-             you should carefully test it.
+             you should carefully test it. 
         </li><li> The converter assumes your project is from the most recent version of AI1.
              If you have an old project, the converter <em>might</em> be able to convert it,
              but if you experience any problems with conversion, you should upgrade your
-             AI1 project to the most recent version of AI1 before converting it to AI2.
+             AI1 project to the most recent version of AI1 before converting it to AI2. 
 
              <p>You can upgrade your AI1 project to the most recent version of AI1
-             simply by loading your project into the
+             simply by loading your project into the 
              <a href="http://beta.appinventor.mit.edu/">current AI1 development environment</a>
              and viewing it both in the Designer window
              and Blocks Editor. This process will automatically perform upgrades that
              might modify your components and blocks. Then it is safe to download your
-             A11 project as a <code>.zip</code> file.
+             A11 project as a <code>.zip</code> file. 
 
              </p><p><strong>Important:</strong> Certain upgrades may require you to change
-             your project. If you see blocks outlined in red in the Blocks Editor,
-             you need to replace those blocks before you try to convert your project to A2.
+             your project. If you see blocks outlined in red in the Blocks Editor, 
+             you need to replace those blocks before you try to convert your project to A2. 
 
-        </p></li><li> If your project loads without error, but does not behave properly.
+        </p></li><li> If your project loads without error, but does not behave properly.   
              there might be an error in your original project. Sometimes blocks are
-             accidentally disconnected or deleted, which is a common source of these errors.
-             In general, you should confirm that your project works in AI1 before converting it.
+             accidentally disconnected or deleted, which is a common source of these errors. 
+             In general, you should confirm that your project works in AI1 before converting it. 
              If your original project doesn't work in AI1, the converted one won't work in AI2!
-        </li><li> There are some known issues with the current converter that are listed below.
+        </li><li> There are some known issues with the current converter that are listed below. 
              You should review these if your converted program doesn't look or behave like
-             you expect.
-        </li><li> <strong>Whom should they contact if they're still having trouble?
-             Should they post on a forum? Should they email lyn directly?</strong>
+             you expect. 
+        <!-- <li> <strong>Whom should they contact if they're still having trouble? 
+             Should they post on a forum? Should they email lyn directly?</strong> --> 
         </li></ul>
         </div>
 
       <p><button id="issuesButton" class="converterButton">Show Known Issues with this Version of the Converter</button>
       </p><div id="issues" style="display: none;">
+        <h2>Known Issues</h2>
         <ul>
-          <li> Older AI1 projects may contain <code>Notifier.ShowChooseDialog</code> and
-               <code>Notifier.ShowTextDialog</code> without the final <code>cancelable</code> argument.
-               Modify these blocks in AI1 before conversion.
-          </li><li> There is a <code>None</code> color block in AI1, but not in AI2.
+          <li> The converter does not yet correctly handle unicode characters. 
+        </li></ul>
+        <h2>Recently Fixed Issues</h2>
+        <ul>
+          <li> The converter correctly converts the <code>Scrollable</code> property on screen components.
+          </li><li> The converter automatically converts 
+               <code>Notifier.ShowChooseDialog</code> and 
+               <code>Notifier.ShowTextDialog</code> blocks that do not have a final <code>cancelable</code> argument.
+               The converter will add an extra <code>false</code> argument in this case. 
+          </li><li> The converter indicates progress in terms of the number of files converted. 
+          </li><li> The converter has a <strong>Cancel Conversion</strong> button to cancel the conversion process.
+          </li><li> The converter no longer generates an <code>.aia</code> file when it encounters a significant error. 
+          </li><li> There is a <code>None</code> color block in AI1, but not in AI2. 
                However, the converter is able to translate it to a <code>make color</code>
                block that takes a 4-element list <code>[255, 255, 255, 0]</code>
-               (the last list component is the alpha, or opacity, component; opacity 0 means transparent).
+               (the last list component is the alpha, or opacity, component; opacity 0 means transparent). 
         </li></ul>
+
       </div>
 
       <p><button id="logButton" class="converterButton">Show Conversion Log</button>
-      </p>
-      <div id="log" style="display: none;">
+      </p><div id="log" style="display: none;">
         <p id="logTitle">Log entries from the conversion process will be displayed below.</p>
         <div id="logItems">
-          <!-- place for log items -->
-      </div>
+        </div><!-- place for log items --> 
       </div>
 
-    </div> <!-- end id="container" -->
+
+    </div> <!-- end id="container" --> 
 
     <!-- load gildas lormeau zip library files -->
-   <script src="zip.js"></script>
+    <script src="zip.js"></script>
     <script src="inflate.js"></script>
     <script src="deflate.js"></script>
 
-    <!-- load google closure library -->
+    <!-- load google closure library --> 
     <script src="closure-library/closure/goog/base.js"></script>
 
-    <!-- load my AI1 to AI2 converter -->
+    <!-- load my AI1 to AI2 converter --> 
     <script src="AI1_v134a_component_specs.js"></script>
     <script src="ai1ConvertBlocks.js"></script>
     <script src="ai1ConvertComponents.js"></script>

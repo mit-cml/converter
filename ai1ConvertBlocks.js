@@ -110,10 +110,16 @@
  *   + 2pm: Post converter version v0.1 to internal AI groups. 
  *   + Fix missing next processing in generic method calls highlighted by Taifun's examples. 
  *   + 5pmish: Post converter version v0.2 to internal AI groups. 
+ * 
+ *  [lyn, 2015 Jun 17]: 
+ *   + Correctly handle the conversion of empty .blk files
+ *   + Add an extra cancelable argument to Notifier.ShowTextDialog and Noitifier.ShowChooseDialog 
+ *     if it's missing. 
+ * /
 
  * TODO: 
- *   ==> SOMETHING IN XML TO SAY IT WAS CONVERTED!!!
- *   + Test various procedure error cases
+ *   + unicode text
+ * + Test various procedure error cases
  *   + Problematic blocks:
  *     - distinguishing math and numeric equality
  *   + Other problems
@@ -130,8 +136,8 @@ goog.require('goog.dom');
 // Returns object {xml: ..., numBlocks: ...}
 function convert_AI1_XML_to_AI2_XML(filename, AI1_XML) { // Both AI1_XML and AI2_XML are strings
   if (AI1_XML.length == 0) {
-    reportUserError("AI1 file " + filename + " is empty!");
-    return {xml: goog.dom.createDom('xml'), numBlocks: 0}; 
+    reportWarning("AI1 file " + filename + " is empty!");
+    return {xml: createAI2EmptyXML(), numBlocks: 0, componentFeaturesMap:{events:{}, methods:{}, properties:{}}};
   }
   try {
     var parseBlocksResult  = parseBlocks(AI1_XML);
@@ -140,7 +146,7 @@ function convert_AI1_XML_to_AI2_XML(filename, AI1_XML) { // Both AI1_XML and AI2
     var AI1_IdMap = makeBlockIdMap(blocksAndStubs); 
   } catch(err) {
     reportSystemError("Caught error in parseBlocks: " + err.message); 
-    return {xml: goog.dom.createDom('xml'), numBlocks: 0}; 
+    return {xml: createAI2EmptyXML (), numBlocks: 0, componentFeaturesMap:{events:{}, methods:{}, properties:{}}};
   }
     // var keys = [];
     // for (var key in IdMap) {
@@ -149,12 +155,27 @@ function convert_AI1_XML_to_AI2_XML(filename, AI1_XML) { // Both AI1_XML and AI2
     // alert(JSON.stringify(keys));
   try {
     var converted = convertBlocks(AI1_IdMap, componentTypeMap); 
-    return {xml: domToPrettyText(converted.xml), numBlocks: converted.numBlocks}
+    return {xml: domToPrettyText(converted.xml), 
+        numBlocks: converted.numBlocks, 
+        componentFeaturesMap: converted.componentFeaturesMap};
   } catch(err) {
     reportSystemError("Caught error in convertBlocks: " + err.message); 
-    return {xml: goog.dom.createDom('xml'), numBlocks: 0}; 
+    return {xml: createAI2EmptyXML(), numBlocks: 0, componentFeaturesMap:{events:{}, methods:{}, properties:{}}};
   }
 }
+
+function createAI2EmptyXML () {
+  /* <xml xmlns="http://www.w3.org/1999/xhtml">
+       <yacodeblocks ya-version="75" language-version="17"></yacodeblocks>
+     </xml>
+   */ 
+  var xml = goog.dom.createDom('xml');
+  xml.setAttribute("xmlnsx", "http://www.w3.org/1999/xhtml"); 
+  xml.appendChild(createElement("yacodeblocks", {"ya-version": "75", "language-version":"17"}, [])); 
+  return domToPrettyText(xml);
+}
+
+
 
 // Return the blocks & block stubs from the XML for an AI1 file. 
 function parseBlocks(text) {
@@ -275,6 +296,8 @@ function convertBlocks(inputIdMap, componentTypeMap) {
   var parentMap = {}; // Map id of AI input block to parent id of AI1 input block. Used to determine top level AI input blocks
                       // = top level AI2 output blocks
   var variableMap = {}; // Map variable "name" block (genus "argument") to the event-handler declaration name it should be. 
+  var componentFeaturesMap = {events: {}, methods:{}, properties: {}}; // Keep track of which component events, methods, and properties were used.
+                                                                       // to inform upgrading of .scm file
   /* // No longer seems necessary ...
   var procNameIdMap = makeProcNameIdMap(inputIdMap); // Map procedure names to their ids
   var procNameParamsMap = {}; // Map each procedure names to an array of its parameter names. 
@@ -283,6 +306,7 @@ function convertBlocks(inputIdMap, componentTypeMap) {
   // Bundle up all maps into an object to reduce number of arguments passed around in conversion
   var maps = {inputIdMap: inputIdMap, outputIdMap: outputIdMap, componentTypeMap: componentTypeMap, 
 	      parentMap: parentMap, variableMap: variableMap, 
+              componentFeaturesMap: componentFeaturesMap
               // procNameIdMap: procNameIdMap, procNameParamsMap: procNameParamsMap // // No longer seems necessary ...
              }
 
@@ -327,10 +351,13 @@ function convertBlocks(inputIdMap, componentTypeMap) {
   // 17 is the earliest AI2 version; upgrader will upgrade it beyond this. 
   xml.appendChild(createElement("yacodeblocks", {"ya-version": "75", "language-version":"17"}, [])); 
   var numBlocksConverted = Object.keys(outputIdMap).length;
-  return {xml: xml, numBlocks: numBlocksConverted}
+  return {xml: xml, numBlocks: numBlocksConverted, componentFeaturesMap: componentFeaturesMap}
 }
 
 function convertBlock(id, maps) {
+  if (! conversionInProgress) {
+    return;
+  }
   // console.log("convertBlock on id " + id); 
   try {
     var block = getBlock(maps.inputIdMap[id]);
@@ -401,7 +428,7 @@ function convertBlock(id, maps) {
         var width = widthString == "" ? 50 : parseInt(widthString);
         var height = heightString == "" ? 50 : parseInt(heightString);
         var commentIsVisible = Boolean(getChildByTagName("Visible", commentChild));
-        console.log("Creating text node for comment with text '" + text + "'");
+        // console.log("Creating text node for comment with text '" + text + "'");
         var ai2CommentElt = createElement("comment", 
                                           {pinned: false, 
                                            // pinned: commentIsVisible
@@ -513,6 +540,7 @@ function convertComponentGetter(id, block, spec, resultBlock, maps) {
   var instanceName = splitList[0];
   var propertyName = splitList[1];
   var componentType = maps.componentTypeMap[instanceName];
+  maps.componentFeaturesMap.properties[componentType + "." + propertyName] = true;
   resultBlock.setAttribute("inline", "false");
 
   // -------------------------------------------------
@@ -563,6 +591,7 @@ function convertComponentSetter(id, block, spec, resultBlock, maps) {
   var instanceName = splitList[0];
   var propertyName = splitList[1];
   var componentType = maps.componentTypeMap[instanceName];
+  maps.componentFeaturesMap.properties[componentType + "." + propertyName] = true;
   resultBlock.setAttribute("inline", "false");
 
   // -------------------------------------------------
@@ -607,6 +636,7 @@ function convertComponentEvent(id, block, spec, resultBlock, maps) {
   var instanceName = splitList[0];
   var eventName = splitList[1]; // Same as spec["eventName"]
   var componentType = maps.componentTypeMap[instanceName]; // Same as spec["componenType"]
+  maps.componentFeaturesMap.events[componentType + "." + eventName] = true;
   appendChildren(resultBlock, 
                  [createElement("mutation", 
                                 {component_type: componentType, 
@@ -622,7 +652,7 @@ function convertComponentEvent(id, block, spec, resultBlock, maps) {
   var socketIds = getExpressionSocketIds(block);
   var paramNames = spec["paramNames"];
   assert(sameNames(socketLabels, paramNames), 
-         "socketLabels is " + namesToString(socketLabels) + "but paramNames is " + namesToString(paramNames));
+         "socketLabels is " + namesToString(socketLabels) + " but paramNames is " + namesToString(paramNames));
   for (var index = 0; index < paramNames.length; index++) {
     var socketId = socketIds[index];
     if (socketId) {
@@ -667,6 +697,7 @@ function convertComponentMethod(id, block, spec, resultBlock, maps) {
   var instanceName = splitList[0];
   var methodName = splitList[1]; // Same as spec["methodName"]
   var componentType = maps.componentTypeMap[instanceName]; // Same as spec["componentType"]
+  maps.componentFeaturesMap.methods[componentType + "." + methodName] = true;
 
   // -------------------------------------------------
   // Special case for renaming method from AI1 to AI2
@@ -750,6 +781,7 @@ function convertGenericComponentGetter(id, block, spec, resultBlock, maps) {
   var splitList = label.split("."); // E.g. "Ball.Speed" => ["Ball", "Speed"]
   var componentType = splitList[0];
   var propertyName = splitList[1];
+  maps.componentFeaturesMap.properties[componentType + "." + propertyName] = true;
   resultBlock.setAttribute("inline", "false");
   appendChildren(resultBlock, 
                  [createElement("mutation", 
@@ -790,6 +822,7 @@ function convertGenericComponentSetter(id, block, spec, resultBlock, maps) {
   var splitList = label.split("."); // E.g. "Ball.Speed" => ["Ball", "Speed"]
   var componentType = splitList[0];
   var propertyName = splitList[1];
+  maps.componentFeaturesMap.properties[componentType + "." + propertyName] = true;
   resultBlock.setAttribute("inline", "false");
   appendChildren(resultBlock, 
                  [createElement("mutation", 
@@ -830,6 +863,7 @@ function convertGenericMethodCall(id, block, spec, resultBlock, maps) {
   var splitList = label.split("."); // E.g. "Ball.PointInDirection" => ["Ball", "PointInDirection"]
   var componentType = splitList[0]; // Same as spec["componentType"]
   var methodName = splitList[1]; // Same as spec["methodName"]
+  maps.componentFeaturesMap.methods[componentType + "." + methodName] = true;
   resultBlock.appendChild(createElement("mutation", 
                                         {component_type: componentType, 
                                          method_name: methodName, 
@@ -1456,6 +1490,85 @@ function convertTinyDBGetValue(id, block, spec, resultBlock, maps) {
 }
 
 /*----------------------------------------------------------------------
+ Notifier-ShowTextDialog and Notifier-ShowChooseDialog methods are special
+ case when need to add cancelable argument. This handles non-generic
+ calls of both. 
+ ----------------------------------------------------------------------*/
+function convertNotifierDialogMethod(id, block, spec, resultBlock, maps) { 
+  var label = getLabelText(block);
+  var splitList = label.split("."); // E.g. "Canvas1.DrawCircle" => ["Canvas1", "DrawCircle"]
+  var instanceName = splitList[0];
+  var methodName = splitList[1]; // Same as spec["methodName"]
+  var componentType = maps.componentTypeMap[instanceName]; // Same as spec["componentType"]
+
+  appendChildren(resultBlock, 
+                 [createElement("mutation", 
+                                {component_type: componentType, 
+                                 instance_name: instanceName,
+                                 method_name: methodName, 
+                                 is_generic: false
+                                }, 
+                                []), 
+                  createFieldElement("COMPONENT_SELECTOR", instanceName), 
+                  ]);
+  var argIds = getExpressionSocketIds(block); // List of ids/nulls for arg blocks
+  var numArgs = argIds.length; // Number of arg sockets in input and output block 
+
+  for (var i = 0; i < numArgs; i++) {
+    convertChildWithId(argIds[i], "ARG" + i, id, block, resultBlock, maps); 
+  }
+  // Here's the spot where we check for cancelable:
+  if (getExpressionSocketLabels(block)[numArgs-1] != "cancelable") {
+    // If we *did* have cancelable id, it has already been converted above
+    // If we *didn't* have it, we need to fill it in with FALSE here. 
+    resultBlock.appendChild(createElement("value", {name: "ARG" + numArgs}, 
+                                          [createElement("block", {type: "logic_boolean"},
+                                                         [createFieldElement("BOOL", "FALSE")])]));
+  }
+
+  // This method call is necessarily a statement, so check for next. 
+  convertNextStatement(id, block, resultBlock, maps);
+}
+
+/*----------------------------------------------------------------------
+ Notifier-ShowTextDialog and Notifier-ShowChooseDialog methods are special
+ case when need to add cancelable argument. This handles generic calls of both. 
+ ----------------------------------------------------------------------*/
+function convertGenericNotifierDialogMethod(id, block, spec, resultBlock, maps) { 
+  var label = getLabelText(block);
+  var splitList = label.split("."); // E.g. "Ball.PointInDirection" => ["Ball", "PointInDirection"]
+  var componentType = splitList[0]; // Same as spec["componentType"]
+  var methodName = splitList[1]; // Same as spec["methodName"]
+  resultBlock.appendChild(createElement("mutation", 
+                                        {component_type: componentType, 
+                                         method_name: methodName, 
+                                         is_generic: true
+                                        }, 
+                                        []));
+  convertChildWithLabel("component", "COMPONENT", id, block, resultBlock, maps);
+  var argIds = getExpressionSocketIds(block); // List of ids/nulls for arg blocks
+  argIds.shift(); // Remove first id, which is for component arg, already converted above. 
+  var numArgs = argIds.length; // Number of arg sockets in input and output block 
+  for (var i = 0; i < numArgs; i++) {
+    convertChildWithId(argIds[i], "ARG" + i, id, block, resultBlock, maps); 
+  }
+
+  // Here's the spot where we check for cancelable:
+  if (getExpressionSocketLabels(block)[numArgs] != "cancelable") { // Note tha numArgs is correct, not numArgs - 1
+                                                                   // becuause first arg was removed. 
+    // If we *did* have cancelable id, it has already been converted above
+    // If we *didn't* have it, we need to fill it in with FALSE here. 
+    resultBlock.appendChild(createElement("value", {name: "ARG" + numArgs}, 
+                                          [createElement("block", {type: "logic_boolean"},
+                                                         [createFieldElement("BOOL", "FALSE")])]));
+  }
+
+  // This method call is necessarily a statement, so check for next. 
+  convertNextStatement(id, block, resultBlock, maps);
+}
+
+
+/*----------------------------------------------------------------------
  Screen.openScreenAnimationa and  Screen.closeScreenAnimation are special cases;
  they have changed from methods in AI1 to properties in AI2. 
  ----------------------------------------------------------------------*/
@@ -1833,24 +1946,64 @@ function addComponentEntriesToAI1ConversionMap() {
     // Include event or method method spec in table
     AI1ConversionMap[name] = componentSpec;
   }
-  // Special cases that override default cases from table
+  /*** Special cases that override default cases from table ***/
+
+  /* In AI2, TinyDB-GetValue added an extra argument valueIfNotFound */
   AI1ConversionMap["TinyDB-GetValue"] 
     = {convert: convertTinyDBGetValue, 
        type: "component_method",
        kind: "expression"};
+
   AI1ConversionMap["Type-TinyDB-GetValue"] // There's only one TinyDB object, so I doubt if anyone
                                            // used this generic method. I'm not gonna waste time implementing it. 
     = {convert: convertUnimplemented, 
        message: "Conversion of the generic form of TinyDB.GetValue has not been implemented.",
        kind: "expression"};
+
+  /* In Form (Screen) component version 11, Screen.openAnimation and Screen.closeAnimation
+     were changed from method calls to properties. */
   AI1ConversionMap["Screen-OpenScreenAnimation"] 
     = {convert: convertScreenAnimation, 
        type: "component_set_get",
        kind: "statement"};
+
   AI1ConversionMap["Screen-CloseScreenAnimation"]
     = {convert: convertScreenAnimation, 
        type: "component_set_get",
        kind: "statement"};
+
+  AI1ConversionMap["Type-Screen-OpenScreenAnimation"]
+    = {convert: convertUnimplemented, 
+       message: "Conversion of the generic form of Screen.OpenScreenAnimation has not been implemented.",
+       kind: "statement"};
+
+  AI1ConversionMap["Type-Screen-CloseScreenAnimation"]
+    = {convert: convertUnimplemented, 
+       message: "Conversion of the generic form of Screen.CloseScreenAnimation has not been implemented.",
+       kind: "statement"};
+
+  /* In Notifier component version 2, Notifier.ShowTextDialog and Notifier.ShowChooseDialog methods
+     were changed to add an extra cancelable argument (defaults to false). We handle that common case here. */
+  AI1ConversionMap["Notifier-ShowTextDialog"]
+    = {convert: convertNotifierDialogMethod, 
+       type: "component_method",
+       kind: "statement"};
+
+  AI1ConversionMap["Notifier-ShowChooseDialog"]
+    = {convert: convertNotifierDialogMethod, 
+       type: "component_method",
+       kind: "statement"};
+
+  AI1ConversionMap["Type-Notifier-ShowTextDialog"]
+    = {convert: convertGenericNotifierDialogMethod, 
+       type: "component_method",
+       kind: "statement"};
+
+  AI1ConversionMap["Type-Notifier-ShowChooseDialog"]
+    = {convert: convertGenericNotifierDialogMethod, 
+       type: "component_method",
+       kind: "statement"};
+
   /* // Code written when I though specs would have format of simple_components.json
   for (var i = 0, componentSpec; componentSpec = AI1_simple_components[i]; i++) {
     var componentName = componentSpec.name;
@@ -2095,8 +2248,8 @@ function getLocation (block) {
 
 function getLabelText (block) {
   var result = getElementText(getChildByTagName("Label", block));
-  // console.log(block);
-  // console.log("getLabelText of above block returns '" + result + "'");
+  //console.log(block);
+  //console.log("getLabelText of above block returns '" + result + "'");
   return result
 }
 

@@ -1,0 +1,86 @@
+/* 
+ * CSS file for AI1 to AI2 project converter 
+ * 
+ *  Author: Lyn Turbak (fturbak@wellesley.edu)
+ */
+
+.converterButton, #conversionFeedback, #formInput, input {
+  font-size: 16px;
+  font-weight: bold; 
+}
+
+#instructions, #troubleshooting, #issues {
+  max-width: 700px;
+}
+
+.note {
+  max-width: 700px;
+  font-style: italic;
+}
+
+#errorBox {
+  border: 1px solid red;
+  padding: 5px;
+}
+
+#errorTitle {
+  margin-top: 0px; 
+  font-size: 14px;
+  font-style: italic;
+}
+
+#formInput {
+  border: 1px solid darkgreen;
+  background-color: #BDFCC9; // mintgreen;
+  margin: 10px 5px;
+  padding: 5px;
+}
+
+#logTitle {
+  border-top: 3px solid #4444CC; /* dark blue */
+  font-size: 14px;
+  font-style: italic;
+}
+
+.log_item {
+  background-color: #CCCCFF; /* dark blue */
+  border: 1px dashed black;
+  margin: 10px 5px;
+  padding: 5px;
+}
+
+.log_item_input {
+  background-color: #FFFFCC; /* light yellow */
+  border: 1px dashed black;
+  margin: 10px 5px;
+  padding: 5px;
+}
+
+.log_item_output {
+  background-color: #CCFFCC; /* light green */
+  border: 1px dashed black;
+  margin: 10px 5px;
+  padding: 5px;
+}
+
+.system_error_item {
+  background-color: #FF8888; /* medium red */
+  border: 1px dashed red;
+  margin: 10px 5px;
+  padding: 5px;
+}
+
+.user_error_item {
+  background-color: #FFA500; /* orange */
+  border: 1px dashed red;
+  margin: 10px 5px;
+  padding: 5px;
+}
+
+.warning_item {
+  background-color: #FFFF44; /* bright yellow */
+  border: 1px dashed black;
+  margin: 10px 5px;
+  padding: 5px;
+}
+
