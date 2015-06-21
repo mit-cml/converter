@@ -113,8 +113,15 @@
  * 
  *  [lyn, 2015 Jun 17]: 
  *   + Correctly handle the conversion of empty .blk files
- *   + Add an extra cancelable argument to Notifier.ShowTextDialog and Noitifier.ShowChooseDialog 
+ *   + Add an extra cancelable argument to Notifier.ShowTextDialog and Notifier.ShowChooseDialog 
  *     if it's missing. 
+ * 
+ *  [lyn, 2015 Jun 21]: 
+ *   + In response to Stephen Burnett Height_calc.aia buggy conversion file, 
+ *     created AI1ConvertMathOpsMore.zip file for testing behavior of all math ops. 
+ *     Discovered bugs in the translation of atan2 (which Stephen's code uses) and 
+ *     random set seed (which Stephen's code doesn't use). I fixed this
+ *     to created version 1.1 of converter. 
  * /
 
  * TODO: 
@@ -1833,7 +1840,7 @@ var AI1ConversionMap =
   "number-expt": {convert: convertOperator, type:"math_power", argNames:["A", "B"], kind: "expression"},
   "number-random-integer": {convert: convertOperator, type:"math_random_int", argNames:["FROM", "TO"], kind: "expression"},
   "number-random-fraction": {convert: convertOperator, type:"math_random_float", argNames:[], kind: "expression"},
-  "number-random-set-seed": {convert: convertOperator, type:"math_random_set_seed", argNames:["NUM"], kind: "expression"},
+  "number-random-set-seed": {convert: convertOperator, type:"math_random_set_seed", argNames:["NUM"], kind: "statement"},
   "number-sqrt": {convert: convertOperator, type:"math_single", 
                   opFieldValue: "ROOT", argNames:["NUM"], kind: "expression"},
   "number-abs": {convert: convertOperator, type:"math_single", 
@@ -1864,7 +1871,7 @@ var AI1ConversionMap =
   "number-asin": {convert: convertOperator, type:"math_trig", opFieldValue: "ASIN", argNames:["NUM"], kind: "expression"},
   "number-acos": {convert: convertOperator, type:"math_trig", opFieldValue: "ACOS", argNames:["NUM"], kind: "expression"},
   "number-atan": {convert: convertOperator, type:"math_trig", opFieldValue: "ATAN", argNames:["NUM"], kind: "expression"},
-  "number-atan2": {convert: convertOperator, type:"math_trig", argNames:["Y", "X"], kind: "expression"},
+  "number-atan2": {convert: convertOperator, type:"math_atan2", argNames:["Y", "X"], kind: "expression"},
   "number-degrees-to-radians": {convert: convertOperator, type:"math_convert_angles", 
                                 opFieldValue: "DEGREES_TO_RADIANS", argNames:["NUM"], kind: "expression"},
   "number-radians-to-degrees": {convert: convertOperator, type:"math_convert_angles", 

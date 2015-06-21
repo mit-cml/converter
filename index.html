@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- saved from url=(0049)http://cs.wellesley.edu/~fturbak/ai1convert_v1.1/ -->
 <html style=""><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta charset="utf-8">
     <title>AI1 to AI2 Converter</title>
@@ -9,7 +10,7 @@
     -->
   <body>
     <div id="container">
-      <h1>AI1 to AI2 Converter (Version <span id="versionNumber">1</span>)</h1>
+      <h1>AI1 to AI2 Converter (Version <span id="versionNumber">1.1</span>)</h1>
 
       <h2>Convert a Project from App Inventor Classic to AI2</h2>
 
@@ -117,7 +118,17 @@
         <ul>
           <li> The converter does not yet correctly handle unicode characters. 
         </li></ul>
-        <h2>Recently Fixed Issues</h2>
+      </div>
+
+      <p><button id="versionsButton" class="converterButton">Show Version Notes</button>
+      </p><div id="versions" style="display: none;">
+        <h2>Version Notes</h2>
+        <h3>Version 1.1</h3>
+        <ul>
+          <li> Bugs in the conversion of the math blocks <code>atan2</code> and <code>random set seed</code> were fixed. 
+        </li></ul>
+        
+        <h3>Version 1.0</h3>
         <ul>
           <li> The converter correctly converts the <code>Scrollable</code> property on screen components.
           </li><li> The converter automatically converts 
@@ -132,8 +143,8 @@
                block that takes a 4-element list <code>[255, 255, 255, 0]</code>
                (the last list component is the alpha, or opacity, component; opacity 0 means transparent). 
         </li></ul>
-
       </div>
+
 
       <p><button id="logButton" class="converterButton">Show Conversion Log</button>
       </p><div id="log" style="display: none;">

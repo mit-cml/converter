@@ -37,6 +37,8 @@
  *   + Add the  "this project has been converted by the AI1 to AI2 converter" information to the .aia file.
  *     - Plan was to put in .blk file. Did not work.
  *     - Instead put it into text block of _DO_NOT_DELETE_ConvertedFromAI1 Screen
+ * 
+ *   [lyn, 2015 Jun 21]: Version 1.1 of converter, which fixes atan2 and random set seed. 
  */ 
 
 goog.require('goog.dom');
@@ -55,8 +57,11 @@ var A1_to_AI12_Converter_Version_Number = 0.3;
 // v0.4 used by lyn only 
 // var A1_to_AI12_Converter_Version_Number = 0.4; 
 
-// v1.0 released to workd on 2015 Jun 18 
+// v1.0 released to world on 2015 Jun 18 
 var A1_to_AI12_Converter_Version_Number = 1.0; 
+
+// v1.1 created on 2015 Jun 21; fixes atan2 and random set seed. 
+var A1_to_AI12_Converter_Version_Number = 1.1; 
 
 function setVersionNumber(num) {
   document.querySelector("#versionNumber").innerHTML = num;
@@ -744,6 +749,7 @@ hideCancelButton();
 makeButtonShowHide("instructionsButton", "instructions", "Instructions", false);
 makeButtonShowHide("troubleshootingButton", "troubleshooting", "Troubleshooting Hints", false);
 makeButtonShowHide("issuesButton", "issues", "Known Issues with this Version of the Converter", false);
+makeButtonShowHide("versionsButton", "versions", "Version Notes", false);
 //makeButtonShowHide("logButton", "log", "Conversion Log", true);
 makeButtonShowHide("logButton", "log", "Conversion Log", false);
 
