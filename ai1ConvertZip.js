@@ -52,16 +52,19 @@ var A1_to_AI12_Converter_Version_Number = 0.2;
 
 // v0.3 released to internal AI groups 2015 Jun 14 9pm
 // Changed unbound reportProjectError to reportProjectError in ai1ConvertComponents.js
-var A1_to_AI12_Converter_Version_Number = 0.3; 
+// var A1_to_AI12_Converter_Version_Number = 0.3; 
 
 // v0.4 used by lyn only 
 // var A1_to_AI12_Converter_Version_Number = 0.4; 
 
 // v1.0 released to world on 2015 Jun 18 
-var A1_to_AI12_Converter_Version_Number = 1.0; 
+// var A1_to_AI12_Converter_Version_Number = 1.0; 
 
 // v1.1 created on 2015 Jun 21; fixes atan2 and random set seed. 
-var A1_to_AI12_Converter_Version_Number = 1.1; 
+// var A1_to_AI12_Converter_Version_Number = 1.1; 
+
+// v1.2
+var A1_to_AI12_Converter_Version_Number = 1.2; 
 
 function setVersionNumber(num) {
   document.querySelector("#versionNumber").innerHTML = num;
@@ -77,7 +80,9 @@ var zipURL = this.URL || this.webkitURL || this.mozURL;
 
 
 function onerror(message) {
-  reportSystemError(message);
+  reportProjectErrorAndTerminateConversion(message);
+  // reportProjectError(message);
+  //resetButtons();
 }
 
 function onprogress(current, total) {
@@ -347,7 +352,7 @@ function reportProjectError(msg) {
     errorItem.appendChild(goog.dom.createTextNode("Project error from screen " + currentScreenName
                                                   + " in file " + currentFileName + ": " + msg));
   } else {
-    errorItem.appendChild(goog.dom.createTextNode("Project error: " + msg));
+    errorItem.appendChild(goog.dom.createTextNode("Project error for " + AI1SourceFilename + ": " + msg));
   }
 }
 
@@ -409,6 +414,12 @@ function resetPage() {
   conversionFeedbackProgressDiv.innerHTML = '';
   conversionFeedbackFinalDiv.innerHTML = '';
   hideCancelButton();
+  AI1SourceFilename = undefined;
+  AI2SourceFilename = undefined;
+  currentScreenName = undefined;
+  currentFileName = undefined;
+  currentScreenName = undefined;
+  convertedAtLeastOneScreenFile = false; 
 }
 
 function resetButtons() {
@@ -513,16 +524,15 @@ function processAI1SourceFile () {
   convertedScreens = {};
   screenComponentFeatures = {};
   projectBasePathName = ''; 
-
   var AI1SourceFile = fileInput.files[0];
+  resetPage(); // clear log and error messages
+  AI1SourceFilename = AI1SourceFile.name;
+  if (!endsWith(AI1SourceFilename, ".zip")) {
+    reportProjectError("AI1 project source file names end in .zip . " 
+                       + AI1SourceFilename + " is not an AI1 project source file");
+    return;
+  }
   getZippedEntries(AI1SourceFile, function(entries) {
-      resetPage(); // clear log and error messages
-      AI1SourceFilename = AI1SourceFile.name;
-      if (!endsWith(AI1SourceFilename, ".zip")) {
-          reportProjectError("AI1 project source file names end in .zip . " 
-                      + AI1SourceFileName + " is not an AI1 project source file");
-          return;
-      }
       AI2SourceFilename = convertAI1ToAI2SourceFilename(AI1SourceFilename);
       var AI1SourceEntries = checkAI1SourceFiles(entries); 
       var numberOfFilesToConvert = AI1SourceEntries.length;

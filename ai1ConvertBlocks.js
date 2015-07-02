@@ -1,53 +1,53 @@
 /*
  * ai1ConvertBlocks.js: Conversion of XML block representation in AI1 .blk files
- *   to XML block representation of AI2 .bky files. 
- * 
+ *   to XML block representation of AI2 .bky files.
+ *
  * Author: Lyn Turbak (fturbak@wellesley.edu)
  *
- * Implementation History: 
- * 
- *  [lyn, 2014 Jul 06-18]: Develop main architecture for converting .blk to .bky XML representations, 
- *     including details for leaf blocks, simple component events, component property setters. 
- * 
+ * Implementation History:
+ *
+ *  [lyn, 2014 Jul 06-18]: Develop main architecture for converting .blk to .bky XML representations,
+ *     including details for leaf blocks, simple component events, component property setters.
+ *
  *  [lyn, 2015 Jun 03]: Swap in code architecture from last July.
- * 
+ *
  *  [lyn, 2015 Jun 06]: Fix escapeHTML to handle spaces and newlines
- * 
- *  [lyn, 2015 Jun 07]: Implement component property getters 
- * 
- *  [lyn, 2015 Jun 08]: Da beginning of da big push: 
+ *
+ *  [lyn, 2015 Jun 07]: Implement component property getters
+ *
+ *  [lyn, 2015 Jun 08]: Da beginning of da big push:
  *    + handle simple binary operator blocks
  *    + special case handling of \n in text block string
  *    + handle empty sockets in operators blocks
  *    + successfully convert A1ConvertTestEquals.zip and AIConvertEmptySockets.zip
- *    + generalize operator conversion to expOp, which handles all expression operators, 
- *        including those with expandable number of args (e.g., make-text). 
- *    + fix bug in domToPrettyText (trimming lines) so that .blk XML displays OK. 
+ *    + generalize operator conversion to expOp, which handles all expression operators,
+ *        including those with expandable number of args (e.g., make-text).
+ *    + fix bug in domToPrettyText (trimming lines) so that .blk XML displays OK.
  *    + successfully test conversion of all text operators with empty sockets (AIConvertTextOps.zip)
- *    + checkout AI1 v134a to explore component database. 
+ *    + checkout AI1 v134a to explore component database.
  *      - initially think simple_components.js contains database, but this is really from AI2
- *        and is still in repository since I didn't do ant clean! 
+ *        and is still in repository since I didn't do ant clean!
  *      - learn on Jun 09 that the *real* database is in components/build/classes/XmlComponentDescription/ya_lang_def.xml
- *    + compare canvas-with-ball programs in AI1 and AI2 in preparation for conversion. 
- * 
- *  [lyn, 2015 Jun 09]: more work on da big push: 
- *    + Although AI1 v134a has a simple_component.json file, it only has component properties, 
+ *    + compare canvas-with-ball programs in AI1 and AI2 in preparation for conversion.
+ *
+ *  [lyn, 2015 Jun 09]: more work on da big push:
+ *    + Although AI1 v134a has a simple_component.json file, it only has component properties,
  *      and not events or methods. Event/methods are in components/build/classes/XmlComponentDescription/ya_lang_def.xml
  *      - Copy this file to AI1_v134a_ya_lang_def.xml
  *      - it's too painful to read and process XML file in JavaScript, so ...
  *      - create python file XMLLangDefToJsonComponentSpecs.py that processes xml lang def in AI1_v134a_ya_lang_def.xml
  *          to produce json component spec AI1_v134a_component_specs defined in AI1_v134a_component_specs.js.
- *          This json summarizes key aspects of events and methods. 
+ *          This json summarizes key aspects of events and methods.
  *      - Below, the function addComponentEntriesToAI1ConversionMap processes these specs and adds them to AI1ConversionMap
- *    + Handle component event and (nongeneric) methods, which takes a long time because of component spec issues above. 
+ *    + Handle component event and (nongeneric) methods, which takes a long time because of component spec issues above.
  *      Also, handling associating AI1 argument declaration names with correct event handler/procedure parameter names
- *      is tricky, and requires sorting blocks by declaraion status. 
+ *      is tricky, and requires sorting blocks by declaraion status.
  *    + Handle event parameters and local variable declarations ("name" blocks of genus "argument")
  *        and local variable getters ("value" blocks of genus "getter"). One tricky aspect is handling
  *        orphaned getter blocks -- getter where associated where "name" block isn't plugged in or is in different scope.
  *        Handle these by creating getters beginning with name "*orphanedArg".
- * 
- *  [lyn, 2015 Jun 10]: yet more work on da big push: 
+ *
+ *  [lyn, 2015 Jun 10]: yet more work on da big push:
  *    + Fix bug in handling of orphaned arguments
  *    + Convert global declarations, global getters, global setters
  *    + Convert all math ops
@@ -55,88 +55,102 @@
  *    + Convert ifelse (in straightforward way, maybe can be fancier later)
  *    + Simplify passing of maps between conversion functions by bundling in a single maps variable.
  *    + Convert procedure declarations; much code can be shared betweedn void and fruitful versions.
- * 
- *  [lyn, 2015 Jun 11]: getting closer to the end .. 
+ *
+ *  [lyn, 2015 Jun 11]: getting closer to the end ..
  *    + Back to work on fast 13" laptop. Yay!
- *    + Convert procedure callers. Simpler than I thought because AI1 XML has explicit arg names in 
- *      BlockConnectors, so there's no need to get them from procedure declaration. 
+ *    + Convert procedure callers. Simpler than I thought because AI1 XML has explicit arg names in
+ *      BlockConnectors, so there's no need to get them from procedure declaration.
  *    + Convert all ops for lists and colors
  *    + Fix handling of expandables in operator conversion
- *    + Clean up conversion code and AI1Conversion map. 
+ *    + Clean up conversion code and AI1Conversion map.
  *    + Convert all logic ops. "and" and "or" are tricky, because their args are expandables
  *      in AI1 but not mutables in AI2. So have to convert list of args to linear tree of
- *      binary operators. 
- * 
+ *      binary operators.
+ *
  *  [lyn, 2015 Jun 12]: finally wrap up draft implementation and start testing
  *    + Complete conversion of control ops (straightforward): loops, choose, screen ops
  *    + Use try/catch to report errors in convertBlock
  *    + Test screen events, methods and operators with two screens. Everything works fine
  *      except openScreenAnimation and closeScreenAnimation methods, which have been
- *      converted from methods to properties in Form version 11. I don't handle these 
- *      correctly yet. 
+ *      converted from methods to properties in Form version 11. I don't handle these
+ *      correctly yet.
  *    + Convert generic objects, methods, property getters/setters
- *    + Handle comments, collapsed blocks, deactivated/disabled blocks. 
+ *    + Handle comments, collapsed blocks, deactivated/disabled blocks.
  *    + All functionality now converted and tested on simple tests, now begin "real"
- *      tests on significant AI1 programs from my Fall 2011 course. 
- * 
+ *      tests on significant AI1 programs from my Fall 2011 course.
+ *
  *  [lyn, 2015 Jun 13]: much more testing
  *    + Test on AI1 projects provided by power users, some of which have thousands
  *      of blocks, some of which have many (e.g. 37) screens
  *    + Investigate and handle color None by converting to (make-color (make-list 255 255 255 0))
  *    + Discover following problems between AI1 v134a and AI2 nb120 (mid Dec. 2013, one of earliest
- *      releases of AI2 (after which AI2 upgrader will handle things): 
- *      - TinyDB.getValue has extra notFound argument in AI2. This is not even expressed in 
+ *      releases of AI2 (after which AI2 upgrader will handle things):
+ *      - TinyDB.getValue has extra notFound argument in AI2. This is not even expressed in
  *        component version numbers, but I caught it in power user testing
  *      - Screen.openScreenAnimation and Screen.closeScreenAnimation changed from methods
  *        to properties. I had stumbled on this before. But not handled by upgrader,
  *        so I need to handle it manually
- *      - Player.IsLooping property renamed to Player.Loop. Again, not handled by 
+ *      - Player.IsLooping property renamed to Player.Loop. Again, not handled by
  *        upgrading, so converter needs to handle.
- *      - Twitter.SetStatus method renamed to Twitter.Tweet. Again, not handled by 
+ *      - Twitter.SetStatus method renamed to Twitter.Tweet. Again, not handled by
  *        upgrading, so converter needs to handle.
  *      The above were found by exhaustive manual git branch comparisons between nb120
- *      and v134a in IntelliJ. 
- * 
- *  [lyn, 2015 Jun 14]: 
+ *      and v134a in IntelliJ.
+ *
+ *  [lyn, 2015 Jun 14]:
  *   + Fix all issues discovered last night
- *   + Old component version numbers are preventing upgrading when loading converted 
+ *   + Old component version numbers are preventing upgrading when loading converted
  *     projects to AI2. I implement .scm converter that (1) updates component versions
- *     to more recent versions when it's safe to do so and (2) reports an error in 
- *     an orange box when it's not safe. 
+ *     to more recent versions when it's safe to do so and (2) reports an error in
+ *     an orange box when it's not safe.
  *   + In general, now distinguish between system errors (red) and user/project errors (orange).
  *   + Converter now appears to work on all my test cases and those of powerusers.
  *     Some converter poweruser projects have runtime errors, but it's not clear they're
  *     a result of conversion.
- *   + 2pm: Post converter version v0.1 to internal AI groups. 
- *   + Fix missing next processing in generic method calls highlighted by Taifun's examples. 
- *   + 5pmish: Post converter version v0.2 to internal AI groups. 
- * 
- *  [lyn, 2015 Jun 17]: 
+ *   + 2pm: Post converter version v0.1 to internal AI groups.
+ *   + Fix missing next processing in generic method calls highlighted by Taifun's examples.
+ *   + 5pmish: Post converter version v0.2 to internal AI groups.
+ *
+ *  [lyn, 2015 Jun 17]:
  *   + Correctly handle the conversion of empty .blk files
- *   + Add an extra cancelable argument to Notifier.ShowTextDialog and Notifier.ShowChooseDialog 
- *     if it's missing. 
- * 
- *  [lyn, 2015 Jun 21]: 
- *   + In response to Stephen Burnett Height_calc.aia buggy conversion file, 
- *     created AI1ConvertMathOpsMore.zip file for testing behavior of all math ops. 
- *     Discovered bugs in the translation of atan2 (which Stephen's code uses) and 
+ *   + Add an extra cancelable argument to Notifier.ShowTextDialog and Notifier.ShowChooseDialog
+ *     if it's missing.
+ *
+ *  [lyn, 2015 Jun 21]:
+ *   + In response to Stephen Burnett Height_calc.aia buggy conversion file,
+ *     created AI1ConvertMathOpsMore.zip file for testing behavior of all math ops.
+ *     Discovered bugs in the translation of atan2 (which Stephen's code uses) and
  *     random set seed (which Stephen's code doesn't use). I fixed this
- *     to created version 1.1 of converter. 
+ *     to created version 1.1 of converter.
+ *
+ *  [lyn, 2015 Jun 23]: Change for version 1.2:
+ *  + Fixed converter to handle unicode characters.
+ *
+ *  [lyn, 2015 Jun 24]: Change for version 1.2:
+ *  + Handle renaming of ImagePicker.ImagePath property to ImagePicker.Selection
+ *    (not handled correctinly in AI2 versioning.js).
+ *
+ *  [lyn, 2015 Jun 30]: Change for version 1.2:
+ *  + Change foo.children (doesn't work in Safari) to goog.dom.getChidren(foo).
+ *    But there's still a problem with downloading file in Safari.
+ *
  * /
 
- * TODO: 
- *   + unicode text
+ * TODO:
+ * + Platform/browser problems:
+ *   - Why doesn't .aia file download in Safari?
+ *   - Any chance of getting this to work in IE?
  * + Test various procedure error cases
  *   + Problematic blocks:
  *     - distinguishing math and numeric equality
  *   + Other problems
-       - why does PaintPoint.zip from 2011 fail, but one reloaded succeeds. 
+       - why does PaintPoint.zip from 2011 fail, but one reloaded succeeds.
  *   + param names that change in AI2
  *   + Test version upgrading issues
- *   + Wish list: 
+ *   + Wish list:
  *     - recording usage stats
  *     - Fancier handling of if
- */ 
+ */
 
 goog.require('goog.dom');
 
@@ -150,9 +164,9 @@ function convert_AI1_XML_to_AI2_XML(filename, AI1_XML) { // Both AI1_XML and AI2
     var parseBlocksResult  = parseBlocks(AI1_XML);
     var blocksAndStubs = parseBlocksResult.blocksAndStubs;
     var componentTypeMap = parseBlocksResult.componentTypeMap;
-    var AI1_IdMap = makeBlockIdMap(blocksAndStubs); 
+    var AI1_IdMap = makeBlockIdMap(blocksAndStubs);
   } catch(err) {
-    reportSystemError("Caught error in parseBlocks: " + err.message); 
+    reportSystemError("Caught error in parseBlocks: " + err.message);
     return {xml: createAI2EmptyXML (), numBlocks: 0, componentFeaturesMap:{events:{}, methods:{}, properties:{}}};
   }
     // var keys = [];
@@ -161,12 +175,12 @@ function convert_AI1_XML_to_AI2_XML(filename, AI1_XML) { // Both AI1_XML and AI2
     // }
     // alert(JSON.stringify(keys));
   try {
-    var converted = convertBlocks(AI1_IdMap, componentTypeMap); 
-    return {xml: domToPrettyText(converted.xml), 
-        numBlocks: converted.numBlocks, 
+    var converted = convertBlocks(AI1_IdMap, componentTypeMap);
+    return {xml: domToPrettyText(converted.xml),
+        numBlocks: converted.numBlocks,
         componentFeaturesMap: converted.componentFeaturesMap};
   } catch(err) {
-    reportSystemError("Caught error in convertBlocks: " + err.message); 
+    reportSystemError("Caught error in convertBlocks: " + err.message);
     return {xml: createAI2EmptyXML(), numBlocks: 0, componentFeaturesMap:{events:{}, methods:{}, properties:{}}};
   }
 }
@@ -175,48 +189,51 @@ function createAI2EmptyXML () {
   /* <xml xmlns="http://www.w3.org/1999/xhtml">
        <yacodeblocks ya-version="75" language-version="17"></yacodeblocks>
      </xml>
-   */ 
+   */
   var xml = goog.dom.createDom('xml');
-  xml.setAttribute("xmlnsx", "http://www.w3.org/1999/xhtml"); 
-  xml.appendChild(createElement("yacodeblocks", {"ya-version": "75", "language-version":"17"}, [])); 
+  xml.setAttribute("xmlnsx", "http://www.w3.org/1999/xhtml");
+  xml.appendChild(createElement("yacodeblocks", {"ya-version": "75", "language-version":"17"}, []));
   return domToPrettyText(xml);
 }
 
 
 
-// Return the blocks & block stubs from the XML for an AI1 file. 
+// Return the blocks & block stubs from the XML for an AI1 file.
 function parseBlocks(text) {
   var oParser = new DOMParser();
   var dom = oParser.parseFromString(text, 'text/xml');
   var yaCodeBlocks = getChildByTagName("YACodeBlocks", dom);
 
-  var pages = getChildByTagName("Pages", yaCodeBlocks); 
-  var page = getChildByTagName("Page", pages); 
-  var pageBlocks = getChildByTagName("PageBlocks", page); 
+  var pages = getChildByTagName("Pages", yaCodeBlocks);
+  var page = getChildByTagName("Page", pages);
+  var pageBlocks = getChildByTagName("PageBlocks", page);
 
-  var youngAndroidMaps = getChildByTagName("YoungAndroidMaps", yaCodeBlocks); 
-  var youngAndroidUuidMap = getChildByTagName("YoungAndroidUuidMap", youngAndroidMaps); 
+  var youngAndroidMaps = getChildByTagName("YoungAndroidMaps", yaCodeBlocks);
+  var youngAndroidUuidMap = getChildByTagName("YoungAndroidUuidMap", youngAndroidMaps);
   var uuidEntries = youngAndroidUuidMap.getElementsByTagName("YoungAndroidUuidEntry");
   var componentTypeMap = {};
   for (var i = 0, entry; entry = uuidEntries[i]; i++) {
     componentTypeMap[entry.getAttribute("component-id")] = entry.getAttribute("component-genus");
   }
-  // var yacodeblocks = getFirstElementChild("yacodeblocks", dom); 
-  // var pages = getFirstElementChild("pages", yacodeblocks); 
-  // var page = getFirstElementChild("page", pages); 
-  // var pageblocks = getFirstElementChild("pageblocks", page); 
-  return {"blocksAndStubs": pageBlocks.children, "componentTypeMap": componentTypeMap};
+  // var yacodeblocks = getFirstElementChild("yacodeblocks", dom);
+  // var pages = getFirstElementChild("pages", yacodeblocks);
+  // var page = getFirstElementChild("page", pages);
+  // var pageblocks = getFirstElementChild("pageblocks", page);
+  // [lyn, 06/29/2015] Use goog.dom.getChildren rather than .children (which does not work in all browsers
+  return {// "blocksAndStubs": pageBlocks.children,
+          "blocksAndStubs": goog.dom.getChildren(pageBlocks),
+          "componentTypeMap": componentTypeMap};
 }
 
-var maxIdSoFar = 0; // Keep track of largest Id seen, for generating new ones. 
+var maxIdSoFar = 0; // Keep track of largest Id seen, for generating new ones.
 
-// Given a list of AI1 blocks and block stubs, return a map of each id to its corresponding block 
+// Given a list of AI1 blocks and block stubs, return a map of each id to its corresponding block
 function makeBlockIdMap(blocksAndStubs) {
   var IdMap = {};
   for (var i = 0, blockOrStub; blockOrStub = blocksAndStubs[i]; i++) {
-    var block = getBlock(blockOrStub); 
+    var block = getBlock(blockOrStub);
     var id = block.attributes.getNamedItem("id").value;
-    maxIdSoFar = Math.max(maxIdSoFar, id); 
+    maxIdSoFar = Math.max(maxIdSoFar, id);
     IdMap[id] = blockOrStub; // When stub, put stub here!
   }
   return IdMap;
@@ -227,10 +244,10 @@ function makeBlockIdMap(blocksAndStubs) {
 // This is used by conversion process to ensure that procedure declaration argument names
 // are processed before callers of the procedure are processed.
 function makeProcNameIdMap(blockIdMap) {
-  var ids = Object.keys(blockIdMap); 
-  var procNameIdMap = {} 
+  var ids = Object.keys(blockIdMap);
+  var procNameIdMap = {}
   for (var i = 0; i < ids.length, i++) {
-    var id = id[i]; 
+    var id = id[i];
     var block = blockIdMap[id];
     var genus = block.getAttribute("genus-name");
     if (genus == "define" || genus == "define-void") {
@@ -248,22 +265,22 @@ function nextId() {
   return maxIdSoFar;
 }
 
-// Returns a list of blocks and stubs ordered by the genus of the underlying block. 
+// Returns a list of blocks and stubs ordered by the genus of the underlying block.
 // Declaration blocks (event handlers, procedures definitions, global variable declarations)
 // come before non-declaration blocks
 function sortedBlocks(idMap) {
-  var keys = Object.keys(idMap); 
+  var keys = Object.keys(idMap);
   var blocks = [];
   for (var i = 0; i < keys.length; i++) {
     blocks.push(getBlock(idMap[keys[i]]));
   }
-  blocks.sort(blockComparator); 
-  return blocks; 
+  blocks.sort(blockComparator);
+  return blocks;
 }
 
-// Comparator for ordering block. All declaration blocks (global variables, 
-// event handlers, procedures) should come before  non-declaration blocks (everything else). 
-// This guarantees that variable declarations will be processed before their uses. 
+// Comparator for ordering block. All declaration blocks (global variables,
+// event handlers, procedures) should come before  non-declaration blocks (everything else).
+// This guarantees that variable declarations will be processed before their uses.
 function blockComparator(blk1, blk2) { // blk1 and blk2 are blocks, not stubs
   var id1 = blk1.getAttribute("id");
   var id2 = blk2.getAttribute("id");
@@ -296,23 +313,23 @@ function isDeclaration(block) { // block, not a stub
 // outputIdMap associates AI1 block ids with the converted AI2 block
 // Returns object {xml: ..., numBlocks: ...}
 function convertBlocks(inputIdMap, componentTypeMap) {
-  var sorted = sortedBlocks(inputIdMap); 
+  var sorted = sortedBlocks(inputIdMap);
   var sortedBlockIds = sorted.map(function (block) { return block.getAttribute("id"); });
   // console.log("sortedBlockIds: " + sortedBlockIds);
   var outputIdMap = {}; // Map id of AI1 input block to AI2 output block, effectively memoizing conversion
   var parentMap = {}; // Map id of AI input block to parent id of AI1 input block. Used to determine top level AI input blocks
                       // = top level AI2 output blocks
-  var variableMap = {}; // Map variable "name" block (genus "argument") to the event-handler declaration name it should be. 
+  var variableMap = {}; // Map variable "name" block (genus "argument") to the event-handler declaration name it should be.
   var componentFeaturesMap = {events: {}, methods:{}, properties: {}}; // Keep track of which component events, methods, and properties were used.
                                                                        // to inform upgrading of .scm file
   /* // No longer seems necessary ...
   var procNameIdMap = makeProcNameIdMap(inputIdMap); // Map procedure names to their ids
-  var procNameParamsMap = {}; // Map each procedure names to an array of its parameter names. 
-  */ 
-  
+  var procNameParamsMap = {}; // Map each procedure names to an array of its parameter names.
+  */
+
   // Bundle up all maps into an object to reduce number of arguments passed around in conversion
-  var maps = {inputIdMap: inputIdMap, outputIdMap: outputIdMap, componentTypeMap: componentTypeMap, 
-	      parentMap: parentMap, variableMap: variableMap, 
+  var maps = {inputIdMap: inputIdMap, outputIdMap: outputIdMap, componentTypeMap: componentTypeMap,
+              parentMap: parentMap, variableMap: variableMap,
               componentFeaturesMap: componentFeaturesMap
               // procNameIdMap: procNameIdMap, procNameParamsMap: procNameParamsMap // // No longer seems necessary ...
              }
@@ -320,12 +337,14 @@ function convertBlocks(inputIdMap, componentTypeMap) {
   for (var i = 0, id; id = sortedBlockIds[i]; i++) {
       convertBlock(id, maps);
   }
-  // Top Level blocks are those without parents. 
+  // Top Level blocks are those without parents.
   var topLevelBlockIds = sortedBlockIds.filter(function(blockId) {
       return (blockId in outputIdMap) && !(blockId in parentMap);});
   // An orphan block (not to be confused with Orphan Black ;-) ) is a top-level block
-  // that's not a declaration. I.e., it's a top-level expression or statement 
+  // that's not a declaration. I.e., it's a top-level expression or statement
   // not connected to anything else.
+  // Note that orphans are determined from the structure of the input AI1 file.
+  // Upon loading the converted file, AI2 may create new orphans if there was a bug in conversion.
   var orphanedBlockIds = topLevelBlockIds.filter(function (blockId) {
       return ! isDeclaration(inputIdMap[blockId]); });
   if (orphanedBlockIds.length > 0) {
@@ -349,14 +368,14 @@ function convertBlocks(inputIdMap, componentTypeMap) {
       converted.setAttribute("y", location.y);
     }
     if (converted) {
-      xml.appendChild(converted); // Careful! Appending an element that is already a child of another element will move it. 
+      xml.appendChild(converted); // Careful! Appending an element that is already a child of another element will move it.
     }
-  } 
+  }
   // Add the following version information:
   //    <yacodeblocks ya-version="75" language-version="17"></yacodeblocks>
-  // 75 summarizes the component versions of AI1, 
-  // 17 is the earliest AI2 version; upgrader will upgrade it beyond this. 
-  xml.appendChild(createElement("yacodeblocks", {"ya-version": "75", "language-version":"17"}, [])); 
+  // 75 summarizes the component versions of AI1,
+  // 17 is the earliest AI2 version; upgrader will upgrade it beyond this.
+  xml.appendChild(createElement("yacodeblocks", {"ya-version": "75", "language-version":"17"}, []));
   var numBlocksConverted = Object.keys(outputIdMap).length;
   return {xml: xml, numBlocks: numBlocksConverted, componentFeaturesMap: componentFeaturesMap}
 }
@@ -365,18 +384,18 @@ function convertBlock(id, maps) {
   if (! conversionInProgress) {
     return;
   }
-  // console.log("convertBlock on id " + id); 
+  // console.log("convertBlock on id " + id);
   try {
     var block = getBlock(maps.inputIdMap[id]);
     var genus = block.getAttribute("genus-name");
     if (genus == "argument") {
-      // AI1 "argument" blocks, i.e., variable declaration name blocks, do not translate to an AI2 block. 
-      // However, for variable translations, need to know the label on this block, so return 
+      // AI1 "argument" blocks, i.e., variable declaration name blocks, do not translate to an AI2 block.
+      // However, for variable translations, need to know the label on this block, so return
       // the label as a string rather than any result block. We do *not* store Id for these
-      // blocks in the outputIdMap. 
+      // blocks in the outputIdMap.
       var connectors = block.getElementsByTagName("BlockConnector");
       if (connectors.length == 1 && connectors[0].getAttribute("connector-kind") == "plug") {
-        var argName = getLabelText(block); // name on the block 
+        var argName = getLabelText(block); // name on the block
         if (connectors[0].getAttribute("con-block-id")) {
           return argName; // return label since it will be associated with parent param name
         } else { // It's an orphaned top-level block, and need to associate it with *some* variable name!
@@ -399,8 +418,8 @@ function convertBlock(id, maps) {
       resultBlock.setAttribute("id", id);
       resultBlock.setAttribute("type", spec.type);
 
-      // Collapsing: In AI1, only top-level blocks can be collapsed. 
-      // We don't know yet which blocks are top-level, so we check them all. 
+      // Collapsing: In AI1, only top-level blocks can be collapsed.
+      // We don't know yet which blocks are top-level, so we check them all.
       // - In AI1, collapsing is indicated by the block containing a <Collapsed/> tag.
       // - In AI2, collapsing on any block is indicated with a block attribute collapsed="true"
       if (getChildByTagName("Collapsed", block)) {
@@ -415,7 +434,7 @@ function convertBlock(id, maps) {
       }
 
       spec.convert(id, block, spec, resultBlock, maps); // Apply conversion function specific to spec.
-      maps.outputIdMap[id] = resultBlock; // Note that if genus == "argument", we return above, 
+      maps.outputIdMap[id] = resultBlock; // Note that if genus == "argument", we return above,
       // and so also do not include such blocks in the outputIdMap.
 
       // Commenting
@@ -428,29 +447,29 @@ function convertBlock(id, maps) {
       //    <comment pinned="false" h="80" w="160">This is a button.</comment>
       var commentChild = getChildByTagName("Comment", block);
       if (commentChild) {
-        var text = getElementText(getChildByTagName("Text", commentChild)); 
-        var sizeChild = getChildByTagName("BoxSize", commentChild); 
-        var widthString = getElementText(getChildByTagName("Width", sizeChild)); 
-        var heightString = getElementText(getChildByTagName("Height", sizeChild)); 
+        var text = getElementText(getChildByTagName("Text", commentChild));
+        var sizeChild = getChildByTagName("BoxSize", commentChild);
+        var widthString = getElementText(getChildByTagName("Width", sizeChild));
+        var heightString = getElementText(getChildByTagName("Height", sizeChild));
         var width = widthString == "" ? 50 : parseInt(widthString);
         var height = heightString == "" ? 50 : parseInt(heightString);
         var commentIsVisible = Boolean(getChildByTagName("Visible", commentChild));
         // console.log("Creating text node for comment with text '" + text + "'");
-        var ai2CommentElt = createElement("comment", 
-                                          {pinned: false, 
+        var ai2CommentElt = createElement("comment",
+                                          {pinned: false,
                                            // pinned: commentIsVisible
                                            // Ignore commentIsVisible, and always set to false.
-                                           // If true, comment bubble will show, but often in 
-                                           // unusual position. 
-                                           w: width, 
-                                           h: height}, 
+                                           // If true, comment bubble will show, but often in
+                                           // unusual position.
+                                           w: width,
+                                           h: height},
                                           [createTextNode(repairString(text))]);
-        insertComment(resultBlock, ai2CommentElt); 
+        insertComment(resultBlock, ai2CommentElt);
       }
     }
-    return resultBlock; 
+    return resultBlock;
   } catch(err) {
-    reportSystemError("Caught error in convertBlock of id " + id + ": " + err.message); 
+    reportSystemError("Caught error in convertBlock of id " + id + ": " + err.message);
     resultBlock = undefined;
   }
 }
@@ -471,24 +490,24 @@ function convertVariableGetter(id, block, spec, resultBlock, maps) {
         <mutation>
           <eventparam name="y"></eventparam>
         </mutation>
-        <field name="VAR">y</field> // In general this name might be different than label getter due to weird 
-                                    // way AI1 handles naming via "name" and "value" naming blocks. 
+        <field name="VAR">y</field> // In general this name might be different than label getter due to weird
+                                    // way AI1 handles naming via "name" and "value" naming blocks.
                                     // But converter does the right thing to fill in this field appropriately
-      </block> 
+      </block>
   */
 
   var argName = getLabelText(block);
   var varName = maps.variableMap[argName];
-  if (! varName) { // The associated "name" block (genus "argument") is an orphan, or declared in some other scope. 
+  if (! varName) { // The associated "name" block (genus "argument") is an orphan, or declared in some other scope.
     var varName = nameNotInValues(maps.variableMap); // create new orphaned argument name ...
     maps.variableMap[argName] = varName; // and remember it
   }
-  appendChildren(resultBlock, 
-                 [// AI2 loading will add this, so we don't need to add it here. 
-                  // createElement("mutation", {}, 
-                  //               [createElement("eventparam", {"name": varName}, [])]), 
-                  createFieldElement("VAR", varName), 
-                  ]);  
+  appendChildren(resultBlock,
+                 [// AI2 loading will add this, so we don't need to add it here.
+                  // createElement("mutation", {},
+                  //               [createElement("eventparam", {"name": varName}, [])]),
+                  createFieldElement("VAR", varName),
+                  ]);
 }
 
 /*----------------------------------------------------------------------
@@ -502,7 +521,7 @@ function convertLeaf(id, block, spec, resultBlock, maps) {
          <block type="math_number" id="670">
            <field name="NUM">17</field>
              </block>
-     Example 2: 
+     Example 2:
        AI1 <Block id="417" genus-name="color-red" > ... <Label>Red</Label> ... </Block>
        => AI2:
           <block type="color_red" id="417">
@@ -511,7 +530,7 @@ function convertLeaf(id, block, spec, resultBlock, maps) {
   */
   // spec.fieldValue overrides label in the case of colors (want "#ff0000", not "Red")
   //   and boolean literals (want "TRUE", not "true")
-  var fieldValue = spec.fieldValue ? spec.fieldValue : getLabelText(block); 
+  var fieldValue = spec.fieldValue ? spec.fieldValue : getLabelText(block);
   if (spec.type == "text") {
     // Special case for processing text value string (to handle strings with too many '\\' characters)
     fieldValue = repairString(fieldValue);
@@ -525,9 +544,9 @@ function convertLeaf(id, block, spec, resultBlock, maps) {
 
 
 function convertComponentGetter(id, block, spec, resultBlock, maps) {
-      /* Example: 
+      /* Example:
 
-            AI1: 
+            AI1:
              <BlockStub><StubParentName>Button1.BackgroundColor</StubParentName><StubParentGenus>read-write-property</StubParentGenus>
                <Block id="552" genus-name="componentGetter" >
                  <Location><X>272</X><Y>97</Y></Location>
@@ -551,41 +570,43 @@ function convertComponentGetter(id, block, spec, resultBlock, maps) {
   resultBlock.setAttribute("inline", "false");
 
   // -------------------------------------------------
-  // Special case for renaming property from AI1 to AI2
+  // Special case for renaming properties from AI1 to AI2
   if (componentType == "Player" && propertyName == "IsLooping") {
     propertyName = "Loop";
+  } else if (componentType == "ImagePicker" && propertyName == "ImagePath") {
+    propertyName = "Selection";
   }
   // -------------------------------------------------
-      
-  appendChildren(resultBlock, 
-                 [createElement("mutation", 
-                                {component_type: componentType, 
+
+  appendChildren(resultBlock,
+                 [createElement("mutation",
+                                {component_type: componentType,
                                  instance_name: instanceName,
-                                 property_name: propertyName, 
-                                 set_or_get: "get", 
+                                 property_name: propertyName,
+                                 set_or_get: "get",
                                  is_generic: "false",
-                                 }, 
-                                []), 
-                 createFieldElement("COMPONENT_SELECTOR", instanceName), 
+                                 },
+                                []),
+                 createFieldElement("COMPONENT_SELECTOR", instanceName),
                  createFieldElement("PROP", propertyName)
                   ]);
 }
 
 function convertComponentSetter(id, block, spec, resultBlock, maps) {
-      /* Example: 
-         AI1: 
-           <Block id="549" genus-name="componentSetter" > ... 
+      /* Example:
+         AI1:
+           <Block id="549" genus-name="componentSetter" > ...
              <Label>Button1.Visible</Label> ...
              <AfterBlockId>553</AfterBlockId> ...
              <Sockets num-sockets="1" >
-               <BlockConnector connector-kind="socket" connector-type="poly" init-type="poly" label="to" 
+               <BlockConnector connector-kind="socket" connector-type="poly" init-type="poly" label="to"
                 position-type="single" con-block-id="551" >
                </BlockConnector>
               </Sockets>
            </Block>
           => AI2:
            <block type="component_set_get" id="549" inline="false">
-           <mutation component_type="Button" set_or_get="set" property_name="Visible" 
+           <mutation component_type="Button" set_or_get="set" property_name="Visible"
             is_generic="false" instance_name="Button1"></mutation>
              <field name="COMPONENT_SELECTOR">Button1</field>
              <field name="PROP">Text</field>
@@ -602,32 +623,34 @@ function convertComponentSetter(id, block, spec, resultBlock, maps) {
   resultBlock.setAttribute("inline", "false");
 
   // -------------------------------------------------
-  // Special case for renaming property from AI1 to AI2
+  // Special case for renaming properties from AI1 to AI2
   if (componentType == "Player" && propertyName == "IsLooping") {
     propertyName = "Loop";
+  } else if (componentType == "ImagePicker" && propertyName == "ImagePath") {
+    propertyName = "Selection";
   }
   // -------------------------------------------------
 
-  appendChildren(resultBlock, 
-                 [createElement("mutation", 
-                                {component_type: componentType, 
+  appendChildren(resultBlock,
+                 [createElement("mutation",
+                                {component_type: componentType,
                                  instance_name: instanceName,
-                                 property_name: propertyName, 
-                                 set_or_get: "set", 
+                                 property_name: propertyName,
+                                 set_or_get: "set",
                                  is_generic: "false",
-                                 }, 
-                                []), 
-                  createFieldElement("COMPONENT_SELECTOR", instanceName), 
+                                 },
+                                []),
+                  createFieldElement("COMPONENT_SELECTOR", instanceName),
                   createFieldElement("PROP", propertyName)
                   ]);
   convertChildWithLabel("to", "VALUE", id, block, resultBlock, maps);
   convertNextStatement(id, block, resultBlock, maps);
-} 
+}
 
 function convertComponentEvent(id, block, spec, resultBlock, maps) {
-      /* AI: <Block id="545" genus-name="Button-Click" > ... <Label>Button1.Click</Label> ... 
+      /* AI: <Block id="545" genus-name="Button-Click" > ... <Label>Button1.Click</Label> ...
                <Sockets num-sockets="1" >
-                 <BlockConnector connector-kind="socket" connector-type="cmd" init-type="cmd" label="do" is-indented="yes" 
+                 <BlockConnector connector-kind="socket" connector-type="cmd" init-type="cmd" label="do" is-indented="yes"
                   position-type="single" con-block-id="555" ></BlockConnector>
                </Sockets>
               </Block>
@@ -644,21 +667,21 @@ function convertComponentEvent(id, block, spec, resultBlock, maps) {
   var eventName = splitList[1]; // Same as spec["eventName"]
   var componentType = maps.componentTypeMap[instanceName]; // Same as spec["componenType"]
   maps.componentFeaturesMap.events[componentType + "." + eventName] = true;
-  appendChildren(resultBlock, 
-                 [createElement("mutation", 
-                                {component_type: componentType, 
+  appendChildren(resultBlock,
+                 [createElement("mutation",
+                                {component_type: componentType,
                                  instance_name: instanceName,
-                                 event_name: eventName, 
-                                }, 
-                                []), 
-                  createFieldElement("COMPONENT_SELECTOR", instanceName), 
+                                 event_name: eventName,
+                                },
+                                []),
+                  createFieldElement("COMPONENT_SELECTOR", instanceName),
                   ]);
 
   // process argument name declarations of event handler
   var socketLabels = getExpressionSocketLabels(block);
   var socketIds = getExpressionSocketIds(block);
   var paramNames = spec["paramNames"];
-  assert(sameNames(socketLabels, paramNames), 
+  assert(sameNames(socketLabels, paramNames),
          "socketLabels is " + namesToString(socketLabels) + " but paramNames is " + namesToString(paramNames));
   for (var index = 0; index < paramNames.length; index++) {
     var socketId = socketIds[index];
@@ -678,7 +701,7 @@ function convertComponentEvent(id, block, spec, resultBlock, maps) {
 }
 
 function convertComponentMethod(id, block, spec, resultBlock, maps) {
-  /* AI: 
+  /* AI:
    <Block id="855" genus-name="Canvas-DrawCircle" >
      <Location><X>109</X><Y>1427</Y></Location>
      <Label>Canvas1.DrawCircle</Label>
@@ -690,7 +713,7 @@ function convertComponentMethod(id, block, spec, resultBlock, maps) {
        <BlockConnector connector-kind="socket" connector-type="poly" init-type="poly" label="r" position-type="single" con-block-id="861" ></BlockConnector>
     </Sockets>
   </Block>
-  => AI2: 
+  => AI2:
       <block type="component_method" id="170" inline="false">
         <mutation component_type="Canvas" method_name="DrawCircle" is_generic="false" instance_name="Canvas1"></mutation>
         <field name="COMPONENT_SELECTOR">Canvas1</field>
@@ -713,21 +736,21 @@ function convertComponentMethod(id, block, spec, resultBlock, maps) {
   }
   // -------------------------------------------------
 
-  appendChildren(resultBlock, 
-                 [createElement("mutation", 
-                                {component_type: componentType, 
+  appendChildren(resultBlock,
+                 [createElement("mutation",
+                                {component_type: componentType,
                                  instance_name: instanceName,
-                                 method_name: methodName, 
+                                 method_name: methodName,
                                  is_generic: false
-                                }, 
-                                []), 
-                  createFieldElement("COMPONENT_SELECTOR", instanceName), 
+                                },
+                                []),
+                  createFieldElement("COMPONENT_SELECTOR", instanceName),
                   ]);
   var argIds = getExpressionSocketIds(block); // List of ids/nulls for arg blocks
-  var numArgs = argIds.length; // Number of arg sockets in input and output block 
+  var numArgs = argIds.length; // Number of arg sockets in input and output block
 
   for (var i = 0; i < numArgs; i++) {
-    convertChildWithId(argIds[i], "ARG" + i, id, block, resultBlock, maps); 
+    convertChildWithId(argIds[i], "ARG" + i, id, block, resultBlock, maps);
   }
   if (spec.kind == "statement") {
     convertNextStatement(id, block, resultBlock, maps);
@@ -739,26 +762,26 @@ function convertComponentMethod(id, block, spec, resultBlock, maps) {
  ----------------------------------------------------------------------*/
 
 function convertGenericComponent(id, block, spec, resultBlock, maps) {
-  /* AI1: 
+  /* AI1:
      <Block id="1077" genus-name="component" >
        <Location><X>319</X><Y>204</Y></Location>
        <Label>Ball1</Label>
        <Plug><BlockConnector connector-kind="plug" connector-type="poly" init-type="poly" label="" position-type="single" con-block-id="1075" ></BlockConnector></Plug>
      </Block>
-     => AI2: 
+     => AI2:
        <block type="component_component_block" id="120">
          <mutation component_type="Ball" instance_name="Ball1"></mutation>
          <field name="COMPONENT_SELECTOR">Ball1</field>
        </block>
   */
   var instanceName = getLabelText(block);
-  var componentType = maps.componentTypeMap[instanceName]; 
-  appendChildren(resultBlock, 
-                 [createElement("mutation", 
-                                {component_type: componentType, 
+  var componentType = maps.componentTypeMap[instanceName];
+  appendChildren(resultBlock,
+                 [createElement("mutation",
+                                {component_type: componentType,
                                  instance_name: instanceName},
-                                []), 
-                  createFieldElement("COMPONENT_SELECTOR", instanceName), 
+                                []),
+                  createFieldElement("COMPONENT_SELECTOR", instanceName),
                   ]);
 }
 
@@ -777,7 +800,7 @@ function convertGenericComponentGetter(id, block, spec, resultBlock, maps) {
        </Sockets>
      </Block>
    </BlockStub>
-   => AI2: 
+   => AI2:
      <block type="component_set_get" id="1393" inline="false">
        <mutation component_type="Ball" set_or_get="get" property_name="Speed" is_generic="true"></mutation>
        <field name="PROP">Speed</field>
@@ -790,14 +813,14 @@ function convertGenericComponentGetter(id, block, spec, resultBlock, maps) {
   var propertyName = splitList[1];
   maps.componentFeaturesMap.properties[componentType + "." + propertyName] = true;
   resultBlock.setAttribute("inline", "false");
-  appendChildren(resultBlock, 
-                 [createElement("mutation", 
-                                {component_type: componentType, 
-                                 property_name: propertyName, 
-                                 set_or_get: "get", 
+  appendChildren(resultBlock,
+                 [createElement("mutation",
+                                {component_type: componentType,
+                                 property_name: propertyName,
+                                 set_or_get: "get",
                                  is_generic: true
-                                 }, 
-                                []), 
+                                 },
+                                []),
                   createFieldElement("PROP", propertyName)]);
   convertChildWithLabel("component", "COMPONENT", id, block, resultBlock, maps);
 }
@@ -817,7 +840,7 @@ function convertGenericComponentSetter(id, block, spec, resultBlock, maps) {
        </Sockets>
      </Block>
    </BlockStub>
-   => AI2: 
+   => AI2:
      <block type="component_set_get" id="1353" inline="false">
        <mutation component_type="Ball" set_or_get="set" property_name="Speed" is_generic="true"></mutation>
        <field name="PROP">Speed</field>
@@ -831,14 +854,14 @@ function convertGenericComponentSetter(id, block, spec, resultBlock, maps) {
   var propertyName = splitList[1];
   maps.componentFeaturesMap.properties[componentType + "." + propertyName] = true;
   resultBlock.setAttribute("inline", "false");
-  appendChildren(resultBlock, 
-                 [createElement("mutation", 
-                                {component_type: componentType, 
-                                 property_name: propertyName, 
-                                 set_or_get: "set", 
+  appendChildren(resultBlock,
+                 [createElement("mutation",
+                                {component_type: componentType,
+                                 property_name: propertyName,
+                                 set_or_get: "set",
                                  is_generic: true
-                                 }, 
-                                []), 
+                                 },
+                                []),
                   createFieldElement("PROP", propertyName)]);
   convertChildWithLabel("component", "COMPONENT", id, block, resultBlock, maps);
   convertChildWithLabel("to", "VALUE", id, block, resultBlock, maps);
@@ -871,18 +894,18 @@ function convertGenericMethodCall(id, block, spec, resultBlock, maps) {
   var componentType = splitList[0]; // Same as spec["componentType"]
   var methodName = splitList[1]; // Same as spec["methodName"]
   maps.componentFeaturesMap.methods[componentType + "." + methodName] = true;
-  resultBlock.appendChild(createElement("mutation", 
-                                        {component_type: componentType, 
-                                         method_name: methodName, 
+  resultBlock.appendChild(createElement("mutation",
+                                        {component_type: componentType,
+                                         method_name: methodName,
                                          is_generic: true
-                                        }, 
+                                        },
                                         []));
   convertChildWithLabel("component", "COMPONENT", id, block, resultBlock, maps);
   var argIds = getExpressionSocketIds(block); // List of ids/nulls for arg blocks
-  argIds.shift(); // Remove first id, which is for component arg, already converted above. 
-  var numArgs = argIds.length; // Number of arg sockets in input and output block 
+  argIds.shift(); // Remove first id, which is for component arg, already converted above.
+  var numArgs = argIds.length; // Number of arg sockets in input and output block
   for (var i = 0; i < numArgs; i++) {
-    convertChildWithId(argIds[i], "ARG" + i, id, block, resultBlock, maps); 
+    convertChildWithId(argIds[i], "ARG" + i, id, block, resultBlock, maps);
   }
   if (spec.kind == "statement") {
     convertNextStatement(id, block, resultBlock, maps);
@@ -894,20 +917,20 @@ function convertGenericMethodCall(id, block, spec, resultBlock, maps) {
  ----------------------------------------------------------------------*/
 
 function convertGlobalDeclaration(id, block, spec, resultBlock, maps) {
-  // This conversion is special only because of field name NAME. Otherwise it would be an operator. 
+  // This conversion is special only because of field name NAME. Otherwise it would be an operator.
   /* AI:
-   <Block id="811" genus-name="def" >...     
+   <Block id="811" genus-name="def" >...
     <Location><X>292</X><Y>58</Y></Location>
     <Label>clicks</Label>
     <Sockets num-sockets="1" >
       <BlockConnector connector-kind="socket" connector-type="poly" init-type="poly" label="as" position-type="single" con-block-id="823" ></BlockConnector>
     </Sockets>
   </Block>
-  => AI2: 
+  => AI2:
     <block type="global_declaration" id="811" inline="false" x="292" y="58">
       <field name="NAME">clicks</field>
      <value name="VALUE">...conversion of block 823...</value>
-   </block> 
+   </block>
   */
   var globalName = getLabelText(block);
   resultBlock.appendChild(createFieldElement("NAME", globalName));
@@ -925,7 +948,7 @@ ctor>
          </Plug>
        </Block>
      </BlockStub>
-  => AI2: 
+  => AI2:
      <block type="lexical_variable_get" id="849">
        <field name="VAR">global clicks</field>
      </block>
@@ -935,7 +958,7 @@ ctor>
 }
 
 function convertGlobalSetter(id, block, spec, resultBlock, maps) {
-  // This conversion is special only because of field name VAR. Otherwise it would be an operator. 
+  // This conversion is special only because of field name VAR. Otherwise it would be an operator.
   /* AI:
     <BlockStub><StubParentName>clicks</StubParentName><StubParentGenus>def</StubParentGenus>
       <Block id="829" genus-name="setterGlobal" >...
@@ -947,7 +970,7 @@ function convertGlobalSetter(id, block, spec, resultBlock, maps) {
         </Sockets>
       </Block>
     </BlockStub>
-  => AI2: 
+  => AI2:
       <block type="lexical_variable_set" id="101" inline="false">
         <field name="VAR">global count</field>
         <value name="VALUE">...conversion of block 833...</value>
@@ -979,102 +1002,102 @@ function convertOperator(id, block, spec, resultBlock, maps) {
       <BlockConnector connector-kind="socket" connector-type="poly" init-type="poly" label="text2" position-type="single" con-block-id="689" ></BlockConnector>
     </Sockets>
   </Block>
-  => AI2: 
+  => AI2:
           <block id="537" type="text_compare" inline="true">
             <field name="OP">EQUAL</field>
             <value name="TEXT1">...conversion of 687...</value>
             <value name="TEXT2">...conversion of 689...</value>
           </block>
-   Note: There are lots of special cases involving things like inlining, AI1 expandable args, etc. 
+   Note: There are lots of special cases involving things like inlining, AI1 expandable args, etc.
   */
 
-  if (Object.keys(spec).indexOf("inline") != -1) { /* Respect any inline specification given 
-                                                      Can't just use if (spec.inline) because it's 
+  if (Object.keys(spec).indexOf("inline") != -1) { /* Respect any inline specification given
+                                                      Can't just use if (spec.inline) because it's
                                                       ignored if result is false! */
     resultBlock.setAttribute("inline", spec.inline);
   }
 
   // If there are expandable sockets (e.g., make-list, add-items-to-list, number-max, number-min, string-vappend)
-  // need to include a mutation element with number of expandable items at top of output XML. 
-  // Also do this in case where spec.mutatorItems is true (string-append conversion needs mutator items, 
-  // but does not have expandable items). 
+  // need to include a mutation element with number of expandable items at top of output XML.
+  // Also do this in case where spec.mutatorItems is true (string-append conversion needs mutator items,
+  // but does not have expandable items).
   if ( spec.expandableOutputName || spec.mutatorNumItems ) {
     var expandableIds = getExpandableExpressionSocketIds(block); // List of ids/nulls for expandable connectors
     var lastId = expandableIds.pop(); // Last expandable socket isn't real, so remove it
-    assert(lastId == null, // Verify there isn't anything there. 
-           "convertOperator: last arg of expandable sockets had non-null id -- " + lastId); 
-    // Add mutation with number of items expected by AI2. 
+    assert(lastId == null, // Verify there isn't anything there.
+           "convertOperator: last arg of expandable sockets had non-null id -- " + lastId);
+    // Add mutation with number of items expected by AI2.
     var numItems = spec.mutatorNumItems ? spec.mutatorNumItems : expandableIds.length;
     resultBlock.appendChild(createElement("mutation", {items: numItems}, []));
   }
 
   // Handle an operator field (if there is one)
-  if (spec.opFieldValue) { // If an operation field is specified, include it as a FIELD element 
+  if (spec.opFieldValue) { // If an operation field is specified, include it as a FIELD element
                           // E.g., math_compare can be LT, LTE, GT, GTE
     var opFieldName = "OP"; // the default
     if (spec.opFieldName) {// override default
       opFieldName = spec.opFieldName;
     }
     resultBlock.appendChild(createFieldElement(opFieldName, spec.opFieldValue));
-  } 
+  }
 
   // Handle regular (nonexpandable) sockets next
   var argIds = getNonexpandableExpressionSocketIds(block); // List of ids/nulls for other arg blocks
-  var numArgs = argIds.length; // Number of arg sockets in input and output block 
+  var numArgs = argIds.length; // Number of arg sockets in input and output block
   var argNames = spec.argNames ? spec.argNames : []; // names of converted operand arguments (empty array if not specified)
-  // Expect argument sockets to match up with converted block argument names 
-  assert(numArgs == argNames.length, 
+  // Expect argument sockets to match up with converted block argument names
+  assert(numArgs == argNames.length,
          "convertOperator: numArgs (" + numArgs + ") != spec.argNames.length (" + argNames.length + ")");
   // Convert all regular argument blocks in non-empty sockets
   for (var i = 0; i < numArgs; i++) {
     convertChildWithId(argIds[i], argNames[i], id, block, resultBlock, maps);
   }
 
-  // Convert the expandable sockets (if they exist, as in make-list, add-items-to-list, number-max, 
+  // Convert the expandable sockets (if they exist, as in make-list, add-items-to-list, number-max,
   // number-min, string-vappend)
   if (spec.expandableOutputName) {
     for (var ex = 0; ex < expandableIds.length; ex++) { //epandableIds defined above
       convertChildWithId(expandableIds[ex], spec.expandableOutputName + ex, id, block, resultBlock, maps);
     }
   }
-  
-  // Finally, if this is statement block with a next block, convert that. 
+
+  // Finally, if this is statement block with a next block, convert that.
   if (spec.kind == "statement") {
     convertNextStatement(id, block, resultBlock, maps);
   }
 }
 
-// Convert an AI1 expandable operator expression into a sequence of binary operator 
+// Convert an AI1 expandable operator expression into a sequence of binary operator
 // expression applications (used for converting "and" and "or" ops)
 function convertExpandableToBinop(id, block, spec, resultBlock, maps) {
-  
+
   var expandableIds = getExpandableExpressionSocketIds(block); // List of ids/nulls for expandable connectors
   var lastId = expandableIds.pop(); // Last expandable socket isn't real, so remove it
-  assert(lastId == null, // Verify there isn't anything there. 
-         "convertOperator: last arg of expandable sockets had non-null id -- " + lastId); 
+  assert(lastId == null, // Verify there isn't anything there.
+         "convertOperator: last arg of expandable sockets had non-null id -- " + lastId);
   convertIdsoBinop(expandableIds, id, spec, resultBlock, maps);
 
-  // Finally, if this is statement block with a next block, convert that. 
+  // Finally, if this is statement block with a next block, convert that.
   if (spec.kind == "statement") {
     convertNextStatement(id, block, resultBlock, maps);
   }
-  
+
 }
 
 // Recursive helper function for above
 function convertIdsoBinop(ids, parentId, spec, resultBlock, maps) {
 
-  if (Object.keys(spec).indexOf("inline") != -1) { /* Respect any inline specification given 
-                                                      Can't just use if (spec.inline) because it's 
+  if (Object.keys(spec).indexOf("inline") != -1) { /* Respect any inline specification given
+                                                      Can't just use if (spec.inline) because it's
                                                       ignored if result is false! */
     resultBlock.setAttribute("inline", spec.inline);
   }
 
   // Handle an operator field (if there is one)
-  if (spec.opFieldValue) { // If an operation field is specified, include it as a FIELD element 
+  if (spec.opFieldValue) { // If an operation field is specified, include it as a FIELD element
                           // E.g., math_compare can be LT, LTE, GT, GTE
     resultBlock.appendChild(createFieldElement("OP", spec.opFieldValue));
-  } 
+  }
 
   if (ids.length == 0) {
     // Do nothing: resultBlock will have two empty sockets;
@@ -1113,14 +1136,14 @@ function convertIdsoBinop(ids, parentId, spec, resultBlock, maps) {
     // Put subBlock in second arg position of result block
     resultBlock.appendChild(createElement("value", {name: spec.argNames[1]}, [subBlock]));
     // Recursively fill the sockets of subBlock
-    convertIdsoBinop(ids, parentId, spec, subBlock, maps); 
-      // Because of ids.shift(), ids has one less element than it had for enclosing convertIdsToBinop, 
+    convertIdsoBinop(ids, parentId, spec, subBlock, maps);
+      // Because of ids.shift(), ids has one less element than it had for enclosing convertIdsToBinop,
       // which causes recursion to eventually terminate
   }
 }
 
 function convertIf(id, block, spec, resultBlock, maps) {
-  /* AI1: 
+  /* AI1:
      <Block id="691" genus-name="if" >
        <Location><X>202</X><Y>876</Y></Location>
        <Label>if</Label>
@@ -1151,7 +1174,7 @@ function convertIf(id, block, spec, resultBlock, maps) {
 
 function convertIfElse(id, block, spec, resultBlock, maps) {
   /* Simple conversion
-     AI1: 
+     AI1:
      <Block id="691" genus-name="ifelse" >
        <Location><X>202</X><Y>876</Y></Location>
        <Label>ifelse</Label>
@@ -1181,15 +1204,15 @@ function convertIfElse(id, block, spec, resultBlock, maps) {
 
 // Convert a choose block
 function convertChoose(id, block, spec, resultBlock, maps) {
-  convertChildWithLabel("test", "TEST", id, block, resultBlock, maps);  
-  convertStmAndExpChildrenWithLabel("then-do", "then-return", "THENRETURN", id, block, resultBlock, maps);  
-  convertStmAndExpChildrenWithLabel("else-do", "else-return", "ELSERETURN", id, block, resultBlock, maps);  
+  convertChildWithLabel("test", "TEST", id, block, resultBlock, maps);
+  convertStmAndExpChildrenWithLabel("then-do", "then-return", "THENRETURN", id, block, resultBlock, maps);
+  convertStmAndExpChildrenWithLabel("else-do", "else-return", "ELSERETURN", id, block, resultBlock, maps);
 }
 
 // Convert a while block
 function convertWhile(id, block, spec, resultBlock, maps) {
-  convertChildWithLabel("test", "TEST", id, block, resultBlock, maps);  
-  convertChildWithLabel("do", "DO", id, block, resultBlock, maps);  
+  convertChildWithLabel("test", "TEST", id, block, resultBlock, maps);
+  convertChildWithLabel("do", "DO", id, block, resultBlock, maps);
   convertNextStatement(id, block, resultBlock, maps);
 }
 
@@ -1198,11 +1221,11 @@ function convertForEach(id, block, spec, resultBlock, maps) {
   var loopVarId = getSocketLabelId("variable", block);
   if (loopVarId) {
     var loopVarName = convertBlock(loopVarId, maps);
-    maps.variableMap[loopVarName] = loopVarName; // Remember that arg name should map to itself.  
+    maps.variableMap[loopVarName] = loopVarName; // Remember that arg name should map to itself.
     resultBlock.appendChild(createFieldElement("VAR", loopVarName));
   }
-  convertChildWithLabel("in list", "LIST", id, block, resultBlock, maps);  
-  convertChildWithLabel("do", "DO", id, block, resultBlock, maps);  
+  convertChildWithLabel("in list", "LIST", id, block, resultBlock, maps);
+  convertChildWithLabel("do", "DO", id, block, resultBlock, maps);
   convertNextStatement(id, block, resultBlock, maps);
 }
 
@@ -1211,13 +1234,13 @@ function convertForRange(id, block, spec, resultBlock, maps) {
   var loopVarId = getSocketLabelId("variable", block);
   if (loopVarId)  {
     var loopVarName = convertBlock(loopVarId, maps);
-    maps.variableMap[loopVarName] = loopVarName; // Remember that arg name should map to itself.  
+    maps.variableMap[loopVarName] = loopVarName; // Remember that arg name should map to itself.
     resultBlock.appendChild(createFieldElement("VAR", loopVarName));
   }
-  convertChildWithLabel("start", "START", id, block, resultBlock, maps);  
-  convertChildWithLabel("end", "END", id, block, resultBlock, maps);  
-  convertChildWithLabel("step", "STEP", id, block, resultBlock, maps);  
-  convertChildWithLabel("do", "DO", id, block, resultBlock, maps);  
+  convertChildWithLabel("start", "START", id, block, resultBlock, maps);
+  convertChildWithLabel("end", "END", id, block, resultBlock, maps);
+  convertChildWithLabel("step", "STEP", id, block, resultBlock, maps);
+  convertChildWithLabel("do", "DO", id, block, resultBlock, maps);
   convertNextStatement(id, block, resultBlock, maps);
 }
 
@@ -1226,7 +1249,7 @@ function convertForRange(id, block, spec, resultBlock, maps) {
  ----------------------------------------------------------------------*/
 
 function convertVoidProcedureDeclaration(id, block, spec, resultBlock, maps) {
-  /* AI1: 
+  /* AI1:
      <Block id="1395" genus-name="define-void" >
        <Location><X>511</X><Y>28</Y></Location>
        <Label>changeOuptutBy</Label>
@@ -1236,7 +1259,7 @@ function convertVoidProcedureDeclaration(id, block, spec, resultBlock, maps) {
          <BlockConnector connector-kind="socket" connector-type="cmd" init-type="cmd" label="do" is-indented="yes" position-type="single" con-block-id="1459" ></BlockConnector>
        </Sockets>
      </Block>
-     => AI2: 
+     => AI2:
      <block type="procedures_defnoreturn" id="1395" x="40" y="29">
        <mutation>
          <arg name="amount"></arg> // List of args goes here
@@ -1246,13 +1269,13 @@ function convertVoidProcedureDeclaration(id, block, spec, resultBlock, maps) {
        <statement name="STACK">...conversion of block 1459</statement>
      </block>
   */
-  processProcedureNameAndParams(id, block, spec, resultBlock, maps); 
-  convertChildWithLabel("do", "STACK", id, block, resultBlock, maps);  
+  processProcedureNameAndParams(id, block, spec, resultBlock, maps);
+  convertChildWithLabel("do", "STACK", id, block, resultBlock, maps);
 }
 
 function convertFruitfulProcedureDeclaration(id, block, spec, resultBlock, maps) {
   /* Example1: (no statement before return expression)
-     AI1: 
+     AI1:
       <Block id="1481" genus-name="define" >
         <Location><X>94</X><Y>553</Y></Location>
         <Label>sumOfSquares</Label>
@@ -1264,7 +1287,7 @@ function convertFruitfulProcedureDeclaration(id, block, spec, resultBlock, maps)
           <BlockConnector connector-kind="socket" connector-type="poly" init-type="poly" label="return" position-type="single" con-block-id="1499"></BlockConnector>
         </Sockets>
       </Block>
-     => AI2: 
+     => AI2:
        <block type="procedures_defreturn" id="192" inline="false" x="49" y="312">
          <mutation>
            <arg name="x"></arg>
@@ -1277,7 +1300,7 @@ function convertFruitfulProcedureDeclaration(id, block, spec, resultBlock, maps)
        </block>
 
    Example2 (has a statement before return expression)
-     AI1: 
+     AI1:
       <Block id="1481" genus-name="define" >
         <Location><X>94</X><Y>553</Y></Location>
         <Label>sumOfSquares</Label>
@@ -1289,7 +1312,7 @@ function convertFruitfulProcedureDeclaration(id, block, spec, resultBlock, maps)
           <BlockConnector connector-kind="socket" connector-type="poly" init-type="poly" label="return" position-type="single" con-block-id="1499"></BlockConnector>
         </Sockets>
       </Block>
-     => AI2: 
+     => AI2:
        <block type="procedures_defreturn" id="192" inline="false" x="49" y="312">
          <mutation>
            <arg name="x"></arg>
@@ -1306,48 +1329,48 @@ function convertFruitfulProcedureDeclaration(id, block, spec, resultBlock, maps)
          </value>
        </block>
   */
-  processProcedureNameAndParams(id, block, spec, resultBlock, maps); 
-  convertStmAndExpChildrenWithLabel("do", "return", "RETURN", id, block, resultBlock, maps);  
+  processProcedureNameAndParams(id, block, spec, resultBlock, maps);
+  convertStmAndExpChildrenWithLabel("do", "return", "RETURN", id, block, resultBlock, maps);
 }
 
 // Determine procedure name and param names, and add corresponding children to result block.
-// Used by both fruitful and void procedures. 
+// Used by both fruitful and void procedures.
 function processProcedureNameAndParams(id, block, spec, resultBlock, maps) {
-  var procName = getLabelText(block); 
-  var paramDeclIds = getExpressionSocketIds(block); 
+  var procName = getLabelText(block);
+  var paramDeclIds = getExpressionSocketIds(block);
   if (spec.type == "procedures_defreturn") {
-    // Fruitful procedure declarations have an addition expresion socket for defining the body. Remove this. 
+    // Fruitful procedure declarations have an addition expresion socket for defining the body. Remove this.
     paramDeclIds.pop(); // Remove last socket = body declaration
   }
-  // All procedure declarations have empty expandable socket that must be removed. 
+  // All procedure declarations have empty expandable socket that must be removed.
   paramDeclIds.pop(); // Remove last argDecl (the expandable one)
-  var paramNames = [] 
+  var paramNames = []
   for (var i = 0; i < paramDeclIds.length; i++) {
-    var paramDeclId = paramDeclIds[i]; 
+    var paramDeclId = paramDeclIds[i];
     if (paramDeclId) {
       var paramName = convertBlock(paramDeclId, maps);
       if (! typeof(paramDeclName) == "string") {
         throw new Error("convertProcedureDeclaration: unexpected paramDeclName " + paramDeclName);
-      } else { 
-	paramNames.push(paramName); 
-        maps.variableMap[paramName] = paramName; // Remember that arg name should map to itself.  
+      } else {
+        paramNames.push(paramName);
+        maps.variableMap[paramName] = paramName; // Remember that arg name should map to itself.
       }
     } else { // No param declared, must make one up
-      paramNames.push("unnamedArg" + i);  
+      paramNames.push("unnamedArg" + i);
     }
   }
-  addArgNamesMutation(resultBlock, procName, paramNames); // also includes name attribute for procName, which isn't required. 
-  resultBlock.appendChild(createFieldElement("NAME", procName)); 
-  appendChildren(resultBlock, 
-		 paramNames.map(function (paramName, index) {
-		     createFieldElement("VAR" + index, paramName); }));
+  addArgNamesMutation(resultBlock, procName, paramNames); // also includes name attribute for procName, which isn't required.
+  resultBlock.appendChild(createFieldElement("NAME", procName));
+  appendChildren(resultBlock,
+                 paramNames.map(function (paramName, index) {
+                     createFieldElement("VAR" + index, paramName); }));
 }
 
-// This works for both fruitful (return) and void (noreturn) procedure calls, 
+// This works for both fruitful (return) and void (noreturn) procedure calls,
 // which are only distinguished by type ("procedures_callreturn" vs "procedures_callnoreturn"),
-// which has already been set from the spec before this is called. 
+// which has already been set from the spec before this is called.
 function convertProcedureCall(id, block, spec, resultBlock, maps) {
-  /* AI1: 
+  /* AI1:
     <BlockStub><StubParentName>sumOfSquares</StubParentName><StubParentGenus>define</StubParentGenus>
       <Block id="1531" genus-name="caller" >
         <Location><X>652</X><Y>556</Y></Location>
@@ -1361,7 +1384,7 @@ function convertProcedureCall(id, block, spec, resultBlock, maps) {
         </Sockets>
       </Block>
     </BlockStub>
-    => AI2: 
+    => AI2:
       <block type="procedures_callreturn" id="231" inline="false">
         <mutation name="sumOfSquares">
           <arg name="x1"></arg>
@@ -1375,12 +1398,12 @@ function convertProcedureCall(id, block, spec, resultBlock, maps) {
   var procName = getLabelText(block);
   var paramNames = getExpressionSocketLabels(block);
   var argIds = getExpressionSocketIds(block);
-  addArgNamesMutation(resultBlock, procName, paramNames); 
-  resultBlock.appendChild(createFieldElement("PROCNAME", procName));     
+  addArgNamesMutation(resultBlock, procName, paramNames);
+  resultBlock.appendChild(createFieldElement("PROCNAME", procName));
   for (var i = 0; i < argIds.length; i++) {
     convertChildWithId(argIds[i], "ARG" + i, id, block, resultBlock, maps);
   }
-  // Finally, if this is statement block with a next block, convert that. 
+  // Finally, if this is statement block with a next block, convert that.
   if (spec.kind == "statement") {
     convertNextStatement(id, block, resultBlock, maps);
   }
@@ -1393,15 +1416,15 @@ function convertProcedureCall(id, block, spec, resultBlock, maps) {
 //     </mutation>
 function addArgNamesMutation(resultBlock, procName, argNames) {
   var argElements = argNames.map(function (argName) {
-      return createElement("arg", {name: argName}, []); }); 
-  resultBlock.appendChild(createElement("mutation", {name: procName}, argElements)); 
+      return createElement("arg", {name: argName}, []); });
+  resultBlock.appendChild(createElement("mutation", {name: procName}, argElements));
 }
 
 
 /*----------------------------------------------------------------------
- Color NONE is a special case. 
- * AI1 has a Color none, whose hex is #00FFFFFF -- i.e., it has a 0 alpha component, 
-   so appears transparent. 
+ Color NONE is a special case.
+ * AI1 has a Color none, whose hex is #00FFFFFF -- i.e., it has a 0 alpha component,
+   so appears transparent.
  * For reasons I don't understand, this color is missing from AI2.
    But we can fake it by (make-color (list 255 255 255 0)) (alpha goes at end in list).
  ----------------------------------------------------------------------*/
@@ -1439,23 +1462,23 @@ function convertNoneColor(id, block, spec, resultBlock, maps) {
           </block>
    */
 
-  /* First, let's define a helper function that creates this: 
+  /* First, let's define a helper function that creates this:
                 <value name="ADD0">
                   <block type="math_number" id="113">
                     <field name="NUM">255</field>
                   </block>
   */
   function numberValue(name, num) {
-    return createElement("value", {name: name}, 
+    return createElement("value", {name: name},
                          [createElement("block", {type: "math_number"},
                                         [createFieldElement("NUM", num)])]);
   }
- 
+
   // Now we can just create the complicated mess
   resultBlock.setAttribute("inline", false);
-  resultBlock.appendChild(createElement("value", {name: "COLORLIST"}, 
+  resultBlock.appendChild(createElement("value", {name: "COLORLIST"},
                                         [createElement("block", {type: "lists_create_with", inline:"false"},
-                                                       [createElement("mutation", {items: 4}, []), 
+                                                       [createElement("mutation", {items: 4}, []),
                                                         numberValue("ADD0", 255),
                                                         numberValue("ADD1", 255),
                                                         numberValue("ADD2", 255),
@@ -1464,9 +1487,9 @@ function convertNoneColor(id, block, spec, resultBlock, maps) {
 
 /*----------------------------------------------------------------------
  TinyDB-GetValue is a special case: need to add second notFound arg (ARG1)
- filled with the empty string. 
+ filled with the empty string.
  ----------------------------------------------------------------------*/
-function convertTinyDBGetValue(id, block, spec, resultBlock, maps) { 
+function convertTinyDBGetValue(id, block, spec, resultBlock, maps) {
  /* Expected output
   <block type="component_method" id="1" inline="false" x="15" y="18">
     <mutation component_type="TinyDB" method_name="GetValue" is_generic="false" instance_name="TinyDB1"></mutation>
@@ -1482,7 +1505,7 @@ function convertTinyDBGetValue(id, block, spec, resultBlock, maps) {
       </block>
     </value>
   </block>
-*/ 
+*/
 
   // Update spec:
   spec.componentType = "TinyDB";
@@ -1491,7 +1514,7 @@ function convertTinyDBGetValue(id, block, spec, resultBlock, maps) {
   // This will create everthing except ARG1 value block
   convertComponentMethod(id, block, spec, resultBlock, maps);
   // Now add ARG1 value block filled with empty string.
-  resultBlock.appendChild(createElement("value", {name: "ARG1"}, 
+  resultBlock.appendChild(createElement("value", {name: "ARG1"},
                                         [createElement("block", {type: "text"},
                                                        [createFieldElement("TEXT", "")])]));
 }
@@ -1499,112 +1522,112 @@ function convertTinyDBGetValue(id, block, spec, resultBlock, maps) {
 /*----------------------------------------------------------------------
  Notifier-ShowTextDialog and Notifier-ShowChooseDialog methods are special
  case when need to add cancelable argument. This handles non-generic
- calls of both. 
+ calls of both.
  ----------------------------------------------------------------------*/
-function convertNotifierDialogMethod(id, block, spec, resultBlock, maps) { 
+function convertNotifierDialogMethod(id, block, spec, resultBlock, maps) {
   var label = getLabelText(block);
   var splitList = label.split("."); // E.g. "Canvas1.DrawCircle" => ["Canvas1", "DrawCircle"]
   var instanceName = splitList[0];
   var methodName = splitList[1]; // Same as spec["methodName"]
   var componentType = maps.componentTypeMap[instanceName]; // Same as spec["componentType"]
 
-  appendChildren(resultBlock, 
-                 [createElement("mutation", 
-                                {component_type: componentType, 
+  appendChildren(resultBlock,
+                 [createElement("mutation",
+                                {component_type: componentType,
                                  instance_name: instanceName,
-                                 method_name: methodName, 
+                                 method_name: methodName,
                                  is_generic: false
-                                }, 
-                                []), 
-                  createFieldElement("COMPONENT_SELECTOR", instanceName), 
+                                },
+                                []),
+                  createFieldElement("COMPONENT_SELECTOR", instanceName),
                   ]);
   var argIds = getExpressionSocketIds(block); // List of ids/nulls for arg blocks
-  var numArgs = argIds.length; // Number of arg sockets in input and output block 
+  var numArgs = argIds.length; // Number of arg sockets in input and output block
 
   for (var i = 0; i < numArgs; i++) {
-    convertChildWithId(argIds[i], "ARG" + i, id, block, resultBlock, maps); 
+    convertChildWithId(argIds[i], "ARG" + i, id, block, resultBlock, maps);
   }
   // Here's the spot where we check for cancelable:
   if (getExpressionSocketLabels(block)[numArgs-1] != "cancelable") {
     // If we *did* have cancelable id, it has already been converted above
-    // If we *didn't* have it, we need to fill it in with FALSE here. 
-    resultBlock.appendChild(createElement("value", {name: "ARG" + numArgs}, 
+    // If we *didn't* have it, we need to fill it in with FALSE here.
+    resultBlock.appendChild(createElement("value", {name: "ARG" + numArgs},
                                           [createElement("block", {type: "logic_boolean"},
                                                          [createFieldElement("BOOL", "FALSE")])]));
   }
 
-  // This method call is necessarily a statement, so check for next. 
+  // This method call is necessarily a statement, so check for next.
   convertNextStatement(id, block, resultBlock, maps);
 }
 
 /*----------------------------------------------------------------------
  Notifier-ShowTextDialog and Notifier-ShowChooseDialog methods are special
- case when need to add cancelable argument. This handles generic calls of both. 
+ case when need to add cancelable argument. This handles generic calls of both.
  ----------------------------------------------------------------------*/
-function convertGenericNotifierDialogMethod(id, block, spec, resultBlock, maps) { 
+function convertGenericNotifierDialogMethod(id, block, spec, resultBlock, maps) {
   var label = getLabelText(block);
   var splitList = label.split("."); // E.g. "Ball.PointInDirection" => ["Ball", "PointInDirection"]
   var componentType = splitList[0]; // Same as spec["componentType"]
   var methodName = splitList[1]; // Same as spec["methodName"]
-  resultBlock.appendChild(createElement("mutation", 
-                                        {component_type: componentType, 
-                                         method_name: methodName, 
+  resultBlock.appendChild(createElement("mutation",
+                                        {component_type: componentType,
+                                         method_name: methodName,
                                          is_generic: true
-                                        }, 
+                                        },
                                         []));
   convertChildWithLabel("component", "COMPONENT", id, block, resultBlock, maps);
   var argIds = getExpressionSocketIds(block); // List of ids/nulls for arg blocks
-  argIds.shift(); // Remove first id, which is for component arg, already converted above. 
-  var numArgs = argIds.length; // Number of arg sockets in input and output block 
+  argIds.shift(); // Remove first id, which is for component arg, already converted above.
+  var numArgs = argIds.length; // Number of arg sockets in input and output block
   for (var i = 0; i < numArgs; i++) {
-    convertChildWithId(argIds[i], "ARG" + i, id, block, resultBlock, maps); 
+    convertChildWithId(argIds[i], "ARG" + i, id, block, resultBlock, maps);
   }
 
   // Here's the spot where we check for cancelable:
   if (getExpressionSocketLabels(block)[numArgs] != "cancelable") { // Note tha numArgs is correct, not numArgs - 1
-                                                                   // becuause first arg was removed. 
+                                                                   // becuause first arg was removed.
     // If we *did* have cancelable id, it has already been converted above
-    // If we *didn't* have it, we need to fill it in with FALSE here. 
-    resultBlock.appendChild(createElement("value", {name: "ARG" + numArgs}, 
+    // If we *didn't* have it, we need to fill it in with FALSE here.
+    resultBlock.appendChild(createElement("value", {name: "ARG" + numArgs},
                                           [createElement("block", {type: "logic_boolean"},
                                                          [createFieldElement("BOOL", "FALSE")])]));
   }
 
-  // This method call is necessarily a statement, so check for next. 
+  // This method call is necessarily a statement, so check for next.
   convertNextStatement(id, block, resultBlock, maps);
 }
 
 
 /*----------------------------------------------------------------------
  Screen.openScreenAnimationa and  Screen.closeScreenAnimation are special cases;
- they have changed from methods in AI1 to properties in AI2. 
+ they have changed from methods in AI1 to properties in AI2.
  ----------------------------------------------------------------------*/
-function convertScreenAnimation(id, block, spec, resultBlock, maps) { 
+function convertScreenAnimation(id, block, spec, resultBlock, maps) {
   // Can almost used the code from convertComponentSetter, *except* that
-  // arg labeled "to" in property set is labeled "animType" in 
-  // open/closeScreenAnimation method calls. 
+  // arg labeled "to" in property set is labeled "animType" in
+  // open/closeScreenAnimation method calls.
   var label = getLabelText(block);
   var splitList = label.split("."); // E.g. "Button1.Visible" => ["Button1", "Visible"]
   var instanceName = splitList[0];
   var propertyName = splitList[1];
   var componentType = maps.componentTypeMap[instanceName];
   resultBlock.setAttribute("inline", "false");
-      
-  appendChildren(resultBlock, 
-                 [createElement("mutation", 
-                                {component_type: componentType, 
+
+  appendChildren(resultBlock,
+                 [createElement("mutation",
+                                {component_type: componentType,
                                  instance_name: instanceName,
-                                 property_name: propertyName, 
-                                 set_or_get: "set", 
+                                 property_name: propertyName,
+                                 set_or_get: "set",
                                  is_generic: "false",
-                                 }, 
-                                []), 
-                  createFieldElement("COMPONENT_SELECTOR", instanceName), 
+                                 },
+                                []),
+                  createFieldElement("COMPONENT_SELECTOR", instanceName),
                   createFieldElement("PROP", propertyName)
                   ]);
   convertChildWithLabel("animType", "VALUE", id, block, resultBlock, maps); //*** The one line that changes from convertComponentSetter
   convertNextStatement(id, block, resultBlock, maps);
-} 
+}
 
 /*----------------------------------------------------------------------
  Unimplemented conversions
@@ -1621,26 +1644,26 @@ function convertUnimplemented(id, block, spec, resultBlock, maps) {
  ----------------------------------------------------------------------*/
 
 function convertChildWithLabel(childLabel, convertedChildName, parentId, parentBlock, resultBlock, maps) {
-  var childId = getSocketLabelId(childLabel, parentBlock); 
+  var childId = getSocketLabelId(childLabel, parentBlock);
   convertChildWithId(childId, convertedChildName, parentId, parentBlock, resultBlock, maps);
 }
 
 function convertChildWithId(childId, convertedChildName, parentId, parentBlock, resultBlock, maps) {
     if (childId) {
-	var outputTag = getSocketOutputTagForId(childId, parentBlock); // Returns "value" for expressions, "statement" for statements, undefined otherwise
-	if (!outputTag) {
-	    throw new Error("convertChildWithId: no output tag for childId " + childId); 
-	} else {
-	    maps.parentMap[childId] = parentId; // Mark that child has id as parent
-	    var childBlock = convertBlock(childId, maps);
-	    resultBlock.appendChild(createElement(outputTag, {name: convertedChildName}, [childBlock]));
-	}
+        var outputTag = getSocketOutputTagForId(childId, parentBlock); // Returns "value" for expressions, "statement" for statements, undefined otherwise
+        if (!outputTag) {
+            throw new Error("convertChildWithId: no output tag for childId " + childId);
+        } else {
+            maps.parentMap[childId] = parentId; // Mark that child has id as parent
+            var childBlock = convertBlock(childId, maps);
+            resultBlock.appendChild(createElement(outputTag, {name: convertedChildName}, [childBlock]));
+        }
     }
 }
 
 // Converts a nexts statement, if there is one; if not (e.g., at last statement or in an expression), does nothing
 function convertNextStatement(parentId, parentBlock, resultBlock, maps) {
-  var nextId = getNextId(parentBlock); 
+  var nextId = getNextId(parentBlock);
   if (nextId) {
     maps.parentMap[nextId] = nextId; // Mark that next has id as parent
     var nextBlock = convertBlock(nextId, maps);
@@ -1652,83 +1675,83 @@ function convertNextStatement(parentId, parentBlock, resultBlock, maps) {
 // If statment is nontrivial, creates DO-RETURN block;
 // otherwise converts to just the expression
 function convertStmAndExpChildrenWithLabel(stmLabel, expLabel, convertedChildName, parentId, parentBlock, resultBlock, maps) {
-  var stmId = getSocketLabelId(stmLabel, parentBlock); 
-  var expId = getSocketLabelId(expLabel, parentBlock); 
+  var stmId = getSocketLabelId(stmLabel, parentBlock);
+  var expId = getSocketLabelId(expLabel, parentBlock);
   if (! stmId) {
     convertChildWithId(expId, convertedChildName, parentId, parentBlock, resultBlock, maps);
   } else { // Statement is nontrivial; create DO-RETURN block
     // Consider stm and exp to be children of parent, even though they're really children of DO-RETURN.
-    // This is OK because parent map is just used to determine top-level blocks. 
-    maps.parentMap[stmId] = parentId; 
+    // This is OK because parent map is just used to determine top-level blocks.
+    maps.parentMap[stmId] = parentId;
     var stmBlock = convertBlock(stmId, maps);
-    var expBlock = null; 
+    var expBlock = null;
     if (expId) {
-      maps.parentMap[expId] = parentId; 
+      maps.parentMap[expId] = parentId;
       var expBlock = convertBlock(expId, maps);
     }
-    var doReturnBlock = makeDoReturnBlock(stmBlock, expBlock); 
-    resultBlock.appendChild(createElement("value", {name: convertedChildName}, [doReturnBlock]));    
+    var doReturnBlock = makeDoReturnBlock(stmBlock, expBlock);
+    resultBlock.appendChild(createElement("value", {name: convertedChildName}, [doReturnBlock]));
   }
 }
 
 // Note: stmBlock is non-falsey but expBlock may be falsey
 function makeDoReturnBlock(stmBlock, expBlock) {
   if (expBlock) {
-    return createElement("block", {type: "controls_do_then_return", inline: "false", id: nextId()}, 
-                         [createElement("statement", {name: "STM"}, [stmBlock]), 
+    return createElement("block", {type: "controls_do_then_return", inline: "false", id: nextId()},
+                         [createElement("statement", {name: "STM"}, [stmBlock]),
                           createElement("value", {name: "VALUE"}, [expBlock])]);
   } else {
-    return createElement("block", {type: "controls_do_then_return", inline: "false", id: nextId()}, 
-                         [createElement("statement", {name: "STM"}, [stmBlock])]); 
+    return createElement("block", {type: "controls_do_then_return", inline: "false", id: nextId()},
+                         [createElement("statement", {name: "STM"}, [stmBlock])]);
   }
-}					      
+}
 
 /*----------------------------------------------------------------------
- Table for table-driven conversion 
+ Table for table-driven conversion
  ----------------------------------------------------------------------*/
 
-// Table that guides the conversion of AI1 to AI2 blocks. 
-// This table is automatically extended by information in AI1_simple_components, 
+// Table that guides the conversion of AI1 to AI2 blocks.
+// This table is automatically extended by information in AI1_simple_components,
 // as defined in the file AI1_v134a_simple_components.js
-var AI1ConversionMap = 
+var AI1ConversionMap =
 {
   // Nonglobal Variables
-  "argument": {kind: "bogus"},  //  "argument" is a special case because not converted. 
-                                // But still need to know if it's a declaraion or not. 
-  
-  "getter": {convert: convertVariableGetter, type: "lexical_variable_get", kind: "expression"}, 
+  "argument": {kind: "bogus"},  //  "argument" is a special case because not converted.
+                                // But still need to know if it's a declaraion or not.
+
+  "getter": {convert: convertVariableGetter, type: "lexical_variable_get", kind: "expression"},
 
   // Global Variables
-  "def": {convert: convertGlobalDeclaration, type: "global_declaration", kind: "declaration"}, 
-  "getterGlobal": {convert: convertGlobalGetter, type: "lexical_variable_get", kind: "expression"}, 
-  "setterGlobal": {convert: convertGlobalSetter, type: "lexical_variable_set", kind: "statement"}, 
+  "def": {convert: convertGlobalDeclaration, type: "global_declaration", kind: "declaration"},
+  "getterGlobal": {convert: convertGlobalGetter, type: "lexical_variable_get", kind: "expression"},
+  "setterGlobal": {convert: convertGlobalSetter, type: "lexical_variable_set", kind: "statement"},
 
   // Components
-  "componentGetter": {convert: convertComponentGetter, type:"component_set_get", kind: "expression"},  
-  "componentSetter": {convert: convertComponentSetter, type:"component_set_get", kind: "statement"},  
+  "componentGetter": {convert: convertComponentGetter, type:"component_set_get", kind: "expression"},
+  "componentSetter": {convert: convertComponentSetter, type:"component_set_get", kind: "statement"},
   // Note: component events and methods are added by addComponentEntriesToAI1ConversionMap() below
   // , e.g., "Canvas-TouchDown" and "Canvas-DrawCircle"
 
   // Generic components, methods, and property getter/setters:
-  "component": {convert: convertGenericComponent, type:"component_component_block", kind: "expression"}, 
-  "componentTypeGetter": {convert: convertGenericComponentGetter, type:"component_set_get", kind: "expression"}, 
-  "componentTypeSetter": {convert: convertGenericComponentSetter, type:"component_set_get", kind: "statement"}, 
+  "component": {convert: convertGenericComponent, type:"component_component_block", kind: "expression"},
+  "componentTypeGetter": {convert: convertGenericComponentGetter, type:"component_set_get", kind: "expression"},
+  "componentTypeSetter": {convert: convertGenericComponentSetter, type:"component_set_get", kind: "statement"},
   // generic methods are added by addComponentEntriesToAI1ConversionMap(), e.g., "Type-Ball-PointInDirection"
 
   // Procedure declarations and calls
-  "define-void": {convert: convertVoidProcedureDeclaration, type:"procedures_defnoreturn", kind: "declaration"},  
-  "define": {convert: convertFruitfulProcedureDeclaration, type:"procedures_defreturn", kind: "declaration"},  
-  "caller": {convert: convertProcedureCall, type:"procedures_callreturn", kind: "expression"},  
-  "caller-command": {convert: convertProcedureCall, type:"procedures_callnoreturn", kind: "statement"},  
+  "define-void": {convert: convertVoidProcedureDeclaration, type:"procedures_defnoreturn", kind: "declaration"},
+  "define": {convert: convertFruitfulProcedureDeclaration, type:"procedures_defreturn", kind: "declaration"},
+  "caller": {convert: convertProcedureCall, type:"procedures_callreturn", kind: "expression"},
+  "caller-command": {convert: convertProcedureCall, type:"procedures_callnoreturn", kind: "statement"},
 
   // Control blocks
-  "choose": {convert: convertChoose, type:"controls_choose", kind: "statement"},  
-  "if": {convert: convertIf, type:"controls_if", kind: "statement"},  
-  "ifelse": {convert: convertIfElse, type:"controls_if", kind: "statement"},  
+  "choose": {convert: convertChoose, type:"controls_choose", kind: "statement"},
+  "if": {convert: convertIf, type:"controls_if", kind: "statement"},
+  "ifelse": {convert: convertIfElse, type:"controls_if", kind: "statement"},
   "glue": {convert: convertOperator, type:"controls_eval_but_ignore", argNames:["VALUE"], kind: "statement"}, // In My definitions drawer, but really control block
-  "foreach": {convert: convertForEach, type:"controls_forEach", kind: "statement"},  
-  "forrange": {convert: convertForRange, type:"controls_forRange", kind: "statement"},  
-  "while": {convert: convertWhile, type:"controls_while", kind: "statement"},  
+  "foreach": {convert: convertForEach, type:"controls_forEach", kind: "statement"},
+  "forrange": {convert: convertForRange, type:"controls_forRange", kind: "statement"},
+  "while": {convert: convertWhile, type:"controls_while", kind: "statement"},
 
 
   // Control ops on screens:
@@ -1742,126 +1765,126 @@ var AI1ConversionMap =
   "open-another-screen-with-start-value": {convert: convertOperator, type: "controls_openAnotherScreenWithStartValue", argNames:["SCREENNAME", "STARTVALUE"], kind: "statement"},
 
   // Colors
-  "color-black": {convert: convertLeaf, type: "color_black", fieldName: "COLOR", fieldValue: "#000000", kind: "expression"},  
-  "color-blue": {convert: convertLeaf, type: "color_blue", fieldName: "COLOR", fieldValue: "#0000ff", kind: "expression"},  
-  "color-cyan": {convert: convertLeaf, type: "color_cyan", fieldName: "COLOR", fieldValue: "#00ffff", kind: "expression"},  
-  "color-dark-gray": {convert: convertLeaf, type: "color_dark_gray", fieldName: "COLOR", fieldValue: "#444444", kind: "expression"},  
-  "color-light-gray": {convert: convertLeaf, type: "color_light_gray", fieldName: "COLOR", fieldValue: "#cccccc", kind: "expression"},  
-  "color-gray": {convert: convertLeaf, type: "color_gray", fieldName: "COLOR", fieldValue: "#888888", kind: "expression"},  
-  "color-green": {convert: convertLeaf, type: "color_green", fieldName: "COLOR", fieldValue: "#00ff00", kind: "expression"},  
-  "color-magenta": {convert: convertLeaf, type: "color_magenta", fieldName: "COLOR", fieldValue: "#ff00ff", kind: "expression"}, 
-  // Tried to fake a color that has 0 alpha component, but does not work. 
-  // "color-none": {convert: convertLeaf, type: "color_white", fieldName: "COLOR", fieldValue: "#00ffffff", kind: "expression"},  
+  "color-black": {convert: convertLeaf, type: "color_black", fieldName: "COLOR", fieldValue: "#000000", kind: "expression"},
+  "color-blue": {convert: convertLeaf, type: "color_blue", fieldName: "COLOR", fieldValue: "#0000ff", kind: "expression"},
+  "color-cyan": {convert: convertLeaf, type: "color_cyan", fieldName: "COLOR", fieldValue: "#00ffff", kind: "expression"},
+  "color-dark-gray": {convert: convertLeaf, type: "color_dark_gray", fieldName: "COLOR", fieldValue: "#444444", kind: "expression"},
+  "color-light-gray": {convert: convertLeaf, type: "color_light_gray", fieldName: "COLOR", fieldValue: "#cccccc", kind: "expression"},
+  "color-gray": {convert: convertLeaf, type: "color_gray", fieldName: "COLOR", fieldValue: "#888888", kind: "expression"},
+  "color-green": {convert: convertLeaf, type: "color_green", fieldName: "COLOR", fieldValue: "#00ff00", kind: "expression"},
+  "color-magenta": {convert: convertLeaf, type: "color_magenta", fieldName: "COLOR", fieldValue: "#ff00ff", kind: "expression"},
+  // Tried to fake a color that has 0 alpha component, but does not work.
+  // "color-none": {convert: convertLeaf, type: "color_white", fieldName: "COLOR", fieldValue: "#00ffffff", kind: "expression"},
   /* Unimplemented version of none
-  "color-none": {convert: convertUnimplemented, 
+  "color-none": {convert: convertUnimplemented,
                  type: "unimplemented_color_none",
                  message: "Conversion of the color None has not been implemented yet.",
                  kind: "expression"},
   */
-  "color-none": {convert: convertNoneColor, type: "color_make_color", kind: "expression"}, 
-  "color-orange": {convert: convertLeaf, type: "color_orange", fieldName: "COLOR", fieldValue: "#ffc800", kind: "expression"},  
-  "color-pink": {convert: convertLeaf, type: "color_pink", fieldName: "COLOR", fieldValue: "#ffafaf", kind: "expression"},  
-  "color-red": {convert: convertLeaf, type: "color_red", fieldName: "COLOR", fieldValue: "#ff0000", kind: "expression"},  
-  "color-white": {convert: convertLeaf, type: "color_white", fieldName: "COLOR", fieldValue: "#ffffff", kind: "expression"},  
-  "color-yellow": {convert: convertLeaf, type: "color_yellow", fieldName: "COLOR", fieldValue: "#ffff00", kind: "expression"},  
-  // Color ops: 
+  "color-none": {convert: convertNoneColor, type: "color_make_color", kind: "expression"},
+  "color-orange": {convert: convertLeaf, type: "color_orange", fieldName: "COLOR", fieldValue: "#ffc800", kind: "expression"},
+  "color-pink": {convert: convertLeaf, type: "color_pink", fieldName: "COLOR", fieldValue: "#ffafaf", kind: "expression"},
+  "color-red": {convert: convertLeaf, type: "color_red", fieldName: "COLOR", fieldValue: "#ff0000", kind: "expression"},
+  "color-white": {convert: convertLeaf, type: "color_white", fieldName: "COLOR", fieldValue: "#ffffff", kind: "expression"},
+  "color-yellow": {convert: convertLeaf, type: "color_yellow", fieldName: "COLOR", fieldValue: "#ffff00", kind: "expression"},
+  // Color ops:
   "make-color": {convert: convertOperator, type: "color_make_color", argNames:["COLORLIST"], kind: "expression"},
-  "split-color": {convert: convertOperator, type: "color_split_color", argNames:["COLOR"], kind: "expression"},    
+  "split-color": {convert: convertOperator, type: "color_split_color", argNames:["COLOR"], kind: "expression"},
 
   // Logic
-  "true": {convert: convertLeaf, type: "logic_boolean", fieldName: "BOOL", fieldValue: "TRUE", kind: "expression"},  
-  "false": {convert: convertLeaf, type: "logic_boolean", fieldName: "BOOL", fieldValue: "FALSE", kind: "expression"},  
-  "yail-equal": {convert: convertOperator, type:"logic_compare", opFieldValue: "EQ", 
-                 inline: true, argNames: ["A", "B"], kind: "expression"}, 
-  "yail-not-equal": {convert: convertOperator, type:"logic_compare", opFieldValue: "NEQ", 
-                 inline: true,argNames: ["A", "B"], kind: "expression"}, 
-  "logical-not": {convert: convertOperator, type:"logic_negate", argNames: ["BOOL"], kind: "expression"}, 
-  "and": {convert: convertExpandableToBinop, type: "logic_operation", inline: false, 
-          opFieldValue: "AND", argNames: ["A", "B"], kind: "expression"},  
-  "or": {convert: convertExpandableToBinop, type: "logic_operation", inline: false, 
-         opFieldValue: "OR", argNames:["A", "B"], kind: "expression"},  
+  "true": {convert: convertLeaf, type: "logic_boolean", fieldName: "BOOL", fieldValue: "TRUE", kind: "expression"},
+  "false": {convert: convertLeaf, type: "logic_boolean", fieldName: "BOOL", fieldValue: "FALSE", kind: "expression"},
+  "yail-equal": {convert: convertOperator, type:"logic_compare", opFieldValue: "EQ",
+                 inline: true, argNames: ["A", "B"], kind: "expression"},
+  "yail-not-equal": {convert: convertOperator, type:"logic_compare", opFieldValue: "NEQ",
+                 inline: true,argNames: ["A", "B"], kind: "expression"},
+  "logical-not": {convert: convertOperator, type:"logic_negate", argNames: ["BOOL"], kind: "expression"},
+  "and": {convert: convertExpandableToBinop, type: "logic_operation", inline: false,
+          opFieldValue: "AND", argNames: ["A", "B"], kind: "expression"},
+  "or": {convert: convertExpandableToBinop, type: "logic_operation", inline: false,
+         opFieldValue: "OR", argNames:["A", "B"], kind: "expression"},
 
   // Lists
   "make-list": {convert: convertOperator, type:"lists_create_with", expandableOutputName: "ADD", kind: "expression"},
-   // add item to list, "list" "item" (expandable) 
+   // add item to list, "list" "item" (expandable)
   "add-items-to-list": {convert: convertOperator, type:"lists_add_items", argNames: ["LIST"], expandableOutputName:"ITEM", kind: "statement"},
-   // append to list, "list1" "list2" 
-   "append-list": {convert: convertOperator, type:"lists_append_list", argNames: ["LIST0", "LIST1"], kind: "statement"},  
+   // append to list, "list1" "list2"
+   "append-list": {convert: convertOperator, type:"lists_append_list", argNames: ["LIST0", "LIST1"], kind: "statement"},
    // copy list, "list"
-   "list-copy": {convert: convertOperator, type:"lists_copy", argNames: ["LIST"], kind: "expression"},  
+   "list-copy": {convert: convertOperator, type:"lists_copy", argNames: ["LIST"], kind: "expression"},
    // insert list item, "list" "index" "item"
-  "insert-list-item": {convert: convertOperator, type:"lists_insert_item", argNames: ["LIST", "INDEX", "ITEM"], kind: "statement"}, 
-   // is a list?, "thing" 
-   "is-list?": {convert: convertOperator, type:"lists_is_list", argNames: ["ITEM"], kind: "expression"},  
-   // is in list?, "thing" "list"  
+  "insert-list-item": {convert: convertOperator, type:"lists_insert_item", argNames: ["LIST", "INDEX", "ITEM"], kind: "statement"},
+   // is a list?, "thing"
+   "is-list?": {convert: convertOperator, type:"lists_is_list", argNames: ["ITEM"], kind: "expression"},
+   // is in list?, "thing" "list"
   "list-member": {convert: convertOperator, type:"lists_is_in", argNames:["ITEM", "LIST"], kind: "expression"},
    // is list empty?, "list"
-   "list-empty?": {convert: convertOperator, type:"lists_is_empty", argNames: ["LIST"], kind: "expression"},  
+   "list-empty?": {convert: convertOperator, type:"lists_is_empty", argNames: ["LIST"], kind: "expression"},
    // length of list, "list"
    "list-length": {convert: convertOperator, type:"lists_length", argNames:["LIST"], kind: "expression"},
     // list from csv row, "text"
-   "list-from-csv-row": {convert: convertOperator, type:"lists_from_csv_row", argNames: ["TEXT"], kind: "expression"},  
+   "list-from-csv-row": {convert: convertOperator, type:"lists_from_csv_row", argNames: ["TEXT"], kind: "expression"},
    // list to csv row, "list"
-   "list-to-csv-row": {convert: convertOperator, type:"lists_to_csv_row", argNames: ["LIST"], kind: "expression"},  
+   "list-to-csv-row": {convert: convertOperator, type:"lists_to_csv_row", argNames: ["LIST"], kind: "expression"},
    // "list from cvs table. "list" (why "list"?)
-   "list-from-csv-table": {convert: convertOperator, type:"lists_from_csv_table", argNames: ["TEXT"], kind: "expression"},  
+   "list-from-csv-table": {convert: convertOperator, type:"lists_from_csv_table", argNames: ["TEXT"], kind: "expression"},
    // list to csv table, "list"
-   "list-to-csv-table": {convert: convertOperator, type:"lists_to_csv_table", argNames: ["LIST"], kind: "expression"},   
+   "list-to-csv-table": {convert: convertOperator, type:"lists_to_csv_table", argNames: ["LIST"], kind: "expression"},
     // lookup in pairs, "key" "pairs" "notFound"
-   "list-lookup-in-pairs": {convert: convertOperator, type:"lists_lookup_in_pairs", argNames: ["KEY", "LIST", "NOTFOUND"], kind: "expression"},  
+   "list-lookup-in-pairs": {convert: convertOperator, type:"lists_lookup_in_pairs", argNames: ["KEY", "LIST", "NOTFOUND"], kind: "expression"},
    // pick random item, "list"
   "list-pick-random": {convert: convertOperator, type:"lists_pick_random_item", argNames:["LIST"], kind: "expression"},
-   // position in list, "thing" "list" 
+   // position in list, "thing" "list"
    "list-index": {convert: convertOperator, type:"lists_position_in", argNames:["ITEM", "LIST"], kind: "expression"},
-   // select list item, "list" "index" 
+   // select list item, "list" "index"
   "get-list-item": {convert: convertOperator, type:"lists_select_item", argNames: ["LIST", "NUM"], kind: "expression"},
-   // remove list item, "list" "index" 
-   "remove-list-item": {convert: convertOperator, type:"lists_remove_item", argNames: ["LIST", "INDEX"], kind: "statement"},  
+   // remove list item, "list" "index"
+   "remove-list-item": {convert: convertOperator, type:"lists_remove_item", argNames: ["LIST", "INDEX"], kind: "statement"},
    // replace list item, "list" "index" "replacement"
-   "replace-list-item": {convert: convertOperator, type:"lists_replace_item", argNames: ["LIST", "NUM", "ITEM"], kind: "statement"},  
+   "replace-list-item": {convert: convertOperator, type:"lists_replace_item", argNames: ["LIST", "NUM", "ITEM"], kind: "statement"},
 
 
   // Math
-  "number": {convert: convertLeaf, type: "math_number", fieldName: "NUM", kind: "expression"}, 
-  "lessthan": {convert: convertOperator, type:"math_compare", opFieldValue: "LT", 
-                 inline: true,argNames: ["A", "B"], kind: "expression"}, 
-  "greaterthan": {convert: convertOperator, type:"math_compare", opFieldValue: "GT", 
-                 inline: true,argNames: ["A", "B"], kind: "expression"}, 
-  "lessthanorequal": {convert: convertOperator, type:"math_compare", opFieldValue: "LTE", 
-                 inline: true,argNames: ["A", "B"], kind: "expression"}, 
-  "greaterthanorequal": {convert: convertOperator, type:"math_compare", opFieldValue: "GTE", 
-                 inline: true,argNames: ["A", "B"], kind: "expression"}, 
-  "number-plus": {convert: convertOperator, type:"math_add", 
+  "number": {convert: convertLeaf, type: "math_number", fieldName: "NUM", kind: "expression"},
+  "lessthan": {convert: convertOperator, type:"math_compare", opFieldValue: "LT",
+                 inline: true,argNames: ["A", "B"], kind: "expression"},
+  "greaterthan": {convert: convertOperator, type:"math_compare", opFieldValue: "GT",
+                 inline: true,argNames: ["A", "B"], kind: "expression"},
+  "lessthanorequal": {convert: convertOperator, type:"math_compare", opFieldValue: "LTE",
+                 inline: true,argNames: ["A", "B"], kind: "expression"},
+  "greaterthanorequal": {convert: convertOperator, type:"math_compare", opFieldValue: "GTE",
+                 inline: true,argNames: ["A", "B"], kind: "expression"},
+  "number-plus": {convert: convertOperator, type:"math_add",
                   numItemsName:"items", argNames:["NUM0", "NUM1"], kind: "expression"},
   "number-minus": {convert: convertOperator, type:"math_subtract", argNames:["A", "B"], kind: "expression"},
-  "number-times": {convert: convertOperator, type:"math_multiply", 
-		   numItemsName:"items", argNames:["NUM0", "NUM1"], kind: "expression"},
+  "number-times": {convert: convertOperator, type:"math_multiply",
+                   numItemsName:"items", argNames:["NUM0", "NUM1"], kind: "expression"},
   "number-divide": {convert: convertOperator, type:"math_division", argNames:["A", "B"], kind: "expression"},
   "number-expt": {convert: convertOperator, type:"math_power", argNames:["A", "B"], kind: "expression"},
   "number-random-integer": {convert: convertOperator, type:"math_random_int", argNames:["FROM", "TO"], kind: "expression"},
   "number-random-fraction": {convert: convertOperator, type:"math_random_float", argNames:[], kind: "expression"},
   "number-random-set-seed": {convert: convertOperator, type:"math_random_set_seed", argNames:["NUM"], kind: "statement"},
-  "number-sqrt": {convert: convertOperator, type:"math_single", 
+  "number-sqrt": {convert: convertOperator, type:"math_single",
                   opFieldValue: "ROOT", argNames:["NUM"], kind: "expression"},
-  "number-abs": {convert: convertOperator, type:"math_single", 
+  "number-abs": {convert: convertOperator, type:"math_single",
                  opFieldValue: "ABS", argNames:["NUM"], kind: "expression"},
-  "number-negate": {convert: convertOperator, type:"math_single", 
+  "number-negate": {convert: convertOperator, type:"math_single",
                     opFieldValue: "NEG", argNames:["NUM"], kind: "expression"},
-  "number-log": {convert: convertOperator, type:"math_single", 
+  "number-log": {convert: convertOperator, type:"math_single",
                  opFieldValue: "LN", argNames:["NUM"], kind: "expression"},
-  "number-exp": {convert: convertOperator, type:"math_single", 
+  "number-exp": {convert: convertOperator, type:"math_single",
                  opFieldValue: "EXP", argNames:["NUM"], kind: "expression"},
-  "number-round": {convert: convertOperator, type:"math_single", 
+  "number-round": {convert: convertOperator, type:"math_single",
                    opFieldValue: "ROUND", argNames:["NUM"], kind: "expression"},
-  "number-ceiling": {convert: convertOperator, type:"math_single", 
+  "number-ceiling": {convert: convertOperator, type:"math_single",
                      opFieldValue: "CEILING", argNames:["NUM"], kind: "expression"},
-  "number-floor": {convert: convertOperator, type:"math_single", 
+  "number-floor": {convert: convertOperator, type:"math_single",
                    opFieldValue: "FLOOR", argNames:["NUM"], kind: "expression"},
-  "number-modulo": {convert: convertOperator, type:"math_divide", inline: false, 
+  "number-modulo": {convert: convertOperator, type:"math_divide", inline: false,
                     opFieldValue: "MODULO", argNames:["DIVIDEND", "DIVISOR"], kind: "expression"},
-  "number-quotient": {convert: convertOperator, type:"math_divide", inline: false, 
+  "number-quotient": {convert: convertOperator, type:"math_divide", inline: false,
                       opFieldValue: "QUOTIENT", argNames:["DIVIDEND","DIVISOR"], kind: "expression"},
-  "number-remainder": {convert: convertOperator, type:"math_divide", inline: false, 
+  "number-remainder": {convert: convertOperator, type:"math_divide", inline: false,
                        opFieldValue: "REMAINDER", argNames:["DIVIDEND", "DIVISOR"], kind: "expression"},
   "number-max": {convert: convertOperator, type:"math_on_list", opFieldValue: "MAX", expandableOutputName: "NUM", kind: "expression"},
   "number-min": {convert: convertOperator, type:"math_on_list", opFieldValue: "MIN", expandableOutputName: "NUM", kind: "expression"},
@@ -1872,46 +1895,46 @@ var AI1ConversionMap =
   "number-acos": {convert: convertOperator, type:"math_trig", opFieldValue: "ACOS", argNames:["NUM"], kind: "expression"},
   "number-atan": {convert: convertOperator, type:"math_trig", opFieldValue: "ATAN", argNames:["NUM"], kind: "expression"},
   "number-atan2": {convert: convertOperator, type:"math_atan2", argNames:["Y", "X"], kind: "expression"},
-  "number-degrees-to-radians": {convert: convertOperator, type:"math_convert_angles", 
+  "number-degrees-to-radians": {convert: convertOperator, type:"math_convert_angles",
                                 opFieldValue: "DEGREES_TO_RADIANS", argNames:["NUM"], kind: "expression"},
-  "number-radians-to-degrees": {convert: convertOperator, type:"math_convert_angles", 
+  "number-radians-to-degrees": {convert: convertOperator, type:"math_convert_angles",
                                 opFieldValue: "RADIANS_TO_DEGREES", argNames:["NUM"], kind: "expression"},
-  "format-as-decimal": {convert: convertOperator, type:"math_format_as_decimal", 
-			argNames:["NUM", "PLACES"], kind: "expression"},
+  "format-as-decimal": {convert: convertOperator, type:"math_format_as_decimal",
+                        argNames:["NUM", "PLACES"], kind: "expression"},
   "number-is-number?": {convert: convertOperator, type:"math_is_a_number", argNames:["NUM"], kind: "expression"},
 
-  // Strings/text 
-  "text": {convert: convertLeaf, type: "text", fieldName: "TEXT", kind: "expression"},  
+  // Strings/text
+  "text": {convert: convertLeaf, type: "text", fieldName: "TEXT", kind: "expression"},
   "string-append": {convert: convertOperator, type:"text_join", mutatorNumItems: 2, inline: true, argNames:["ADD0", "ADD1"], kind: "expression"},
   "string-vappend": {convert: convertOperator, type:"text_join", expandableOutputName: "ADD", kind: "expression"},
-  "string-contains": {convert: convertOperator, type:"text_contains", argNames: ["TEXT", "PIECE"], kind: "expression"}, 
-  "string-downcase": {convert: convertOperator, type:"text_changeCase", 
+  "string-contains": {convert: convertOperator, type:"text_contains", argNames: ["TEXT", "PIECE"], kind: "expression"},
+  "string-downcase": {convert: convertOperator, type:"text_changeCase",
                       opFieldValue: "DOWNCASE", argNames: ["TEXT"], kind: "expression"},
-  "string-upcase": {convert: convertOperator, type:"text_changeCase", 
+  "string-upcase": {convert: convertOperator, type:"text_changeCase",
                     opFieldValue: "UPCASE", argNames: ["TEXT"], kind: "expression"},
   "string-empty?": {convert: convertOperator, type:"text_isEmpty", argNames: ["VALUE"], kind: "expression"},
-  "string-equal": {convert: convertOperator, type:"text_compare", 
+  "string-equal": {convert: convertOperator, type:"text_compare",
                    opFieldValue: "EQUAL", inline: true, argNames: ["TEXT1", "TEXT2"], kind: "expression"},
-  "string-greater-than": {convert: convertOperator, type:"text_compare", opFieldValue: "GT", 
+  "string-greater-than": {convert: convertOperator, type:"text_compare", opFieldValue: "GT",
                           inline: true, argNames: ["TEXT1", "TEXT2"], kind: "expression"},
-  "string-less-than": {convert: convertOperator, type:"text_compare", 
-                       opFieldValue: "LT", inline: true, argNames: ["TEXT1", "TEXT2"], kind: "expression"}, 
-  "string-length": {convert: convertOperator, type:"text_length", argNames: ["VALUE"], kind: "expression"}, 
-  "string-replace-all": {convert: convertOperator, type:"text_replace_all", argNames: ["TEXT", "SEGMENT", "REPLACEMENT"], kind: "expression"}, 
+  "string-less-than": {convert: convertOperator, type:"text_compare",
+                       opFieldValue: "LT", inline: true, argNames: ["TEXT1", "TEXT2"], kind: "expression"},
+  "string-length": {convert: convertOperator, type:"text_length", argNames: ["VALUE"], kind: "expression"},
+  "string-replace-all": {convert: convertOperator, type:"text_replace_all", argNames: ["TEXT", "SEGMENT", "REPLACEMENT"], kind: "expression"},
 
-  "string-starts-at": {convert: convertOperator, type:"text_starts_at", argNames: ["TEXT", "PIECE"], kind: "expression"}, 
-  "string-split": {convert: convertOperator, type:"text_split", argNames: ["TEXT", "AT"], 
-                   opFieldValue: "SPLIT", kind: "expression"}, 
-  "string-split-at-first": {convert: convertOperator, type:"text_split", argNames: ["TEXT", "AT"], 
-                            opFieldValue: "SPLITATFIRST", kind: "expression"}, 
-  "string-split-at-any": {convert: convertOperator, type:"text_split", argNames: ["TEXT", "AT"], 
-                          opFieldValue: "SPLITATANY", kind: "expression"}, 
-  "string-split-at-first-of-any": {convert: convertOperator, type:"text_split", argNames: ["TEXT", "AT"], 
-                                   opFieldValue: "SPLITATFIRSTOFANY", kind: "expression"}, 
-  "string-split-at-spaces": {convert: convertOperator, type:"text_split_at_spaces", argNames: ["TEXT"], kind: "expression"}, 
-  // text segment: 
-  "string-subtext": {convert: convertOperator, type:"text_segment", argNames: ["TEXT", "START", "LENGTH"], kind: "expression"}, 
-  "string-trim": {convert: convertOperator, type:"text_trim", argNames: ["TEXT"], kind: "expression"}, 
+  "string-starts-at": {convert: convertOperator, type:"text_starts_at", argNames: ["TEXT", "PIECE"], kind: "expression"},
+  "string-split": {convert: convertOperator, type:"text_split", argNames: ["TEXT", "AT"],
+                   opFieldValue: "SPLIT", kind: "expression"},
+  "string-split-at-first": {convert: convertOperator, type:"text_split", argNames: ["TEXT", "AT"],
+                            opFieldValue: "SPLITATFIRST", kind: "expression"},
+  "string-split-at-any": {convert: convertOperator, type:"text_split", argNames: ["TEXT", "AT"],
+                          opFieldValue: "SPLITATANY", kind: "expression"},
+  "string-split-at-first-of-any": {convert: convertOperator, type:"text_split", argNames: ["TEXT", "AT"],
+                                   opFieldValue: "SPLITATFIRSTOFANY", kind: "expression"},
+  "string-split-at-spaces": {convert: convertOperator, type:"text_split_at_spaces", argNames: ["TEXT"], kind: "expression"},
+  // text segment:
+  "string-subtext": {convert: convertOperator, type:"text_segment", argNames: ["TEXT", "START", "LENGTH"], kind: "expression"},
+  "string-trim": {convert: convertOperator, type:"text_trim", argNames: ["TEXT"], kind: "expression"},
 
 };
 
@@ -1919,7 +1942,7 @@ var AI1ConversionMap =
 // as defined in the file AI1_v134a_component_specs.js
 function addComponentEntriesToAI1ConversionMap() {
   var eventAndMethodNames = Object.keys(AI1_v134a_component_specs);
-  for (var i = 0; i < eventAndMethodNames.length; i++) {  
+  for (var i = 0; i < eventAndMethodNames.length; i++) {
     var name = eventAndMethodNames[i]; // E.g. "Button-Click", "Canvas-Dragged"
     var componentSpec = AI1_v134a_component_specs[name];
     var splitList = name.split("-"); // E.g. "Button-Click" => ["Button", "Click"]
@@ -1936,78 +1959,78 @@ function addComponentEntriesToAI1ConversionMap() {
       componentSpec["convert"] = convertComponentMethod;
       componentSpec["componentType"] = componentType;
       componentSpec["methodName"] = eventOrMethodName;
-      // Already has kind in the method spec, so no need to set here. 
+      // Already has kind in the method spec, so no need to set here.
 
       // Generic method calls
       genericMethodName = "Type-" + name; // E.g. "Type-Ball-PointInDirection"
-      genericMethodSpec = {convert: convertGenericMethodCall, 
-                           type: "component_method", 
+      genericMethodSpec = {convert: convertGenericMethodCall,
+                           type: "component_method",
                            componentType: componentType,
                            methodName: eventOrMethodName,
                            kind: componentSpec.kind}
       // Include generic method spec in table
-      AI1ConversionMap[genericMethodName] = genericMethodSpec;      
+      AI1ConversionMap[genericMethodName] = genericMethodSpec;
     } else {
       throw new Error("addComponentEntriesToAI1ConversionMap encountered spec not for method or event");
-    } 
+    }
     // Include event or method method spec in table
     AI1ConversionMap[name] = componentSpec;
   }
   /*** Special cases that override default cases from table ***/
 
   /* In AI2, TinyDB-GetValue added an extra argument valueIfNotFound */
-  AI1ConversionMap["TinyDB-GetValue"] 
-    = {convert: convertTinyDBGetValue, 
+  AI1ConversionMap["TinyDB-GetValue"]
+    = {convert: convertTinyDBGetValue,
        type: "component_method",
        kind: "expression"};
 
   AI1ConversionMap["Type-TinyDB-GetValue"] // There's only one TinyDB object, so I doubt if anyone
-                                           // used this generic method. I'm not gonna waste time implementing it. 
-    = {convert: convertUnimplemented, 
+                                           // used this generic method. I'm not gonna waste time implementing it.
+    = {convert: convertUnimplemented,
        message: "Conversion of the generic form of TinyDB.GetValue has not been implemented.",
        kind: "expression"};
 
   /* In Form (Screen) component version 11, Screen.openAnimation and Screen.closeAnimation
      were changed from method calls to properties. */
-  AI1ConversionMap["Screen-OpenScreenAnimation"] 
-    = {convert: convertScreenAnimation, 
+  AI1ConversionMap["Screen-OpenScreenAnimation"]
+    = {convert: convertScreenAnimation,
        type: "component_set_get",
        kind: "statement"};
 
   AI1ConversionMap["Screen-CloseScreenAnimation"]
-    = {convert: convertScreenAnimation, 
+    = {convert: convertScreenAnimation,
        type: "component_set_get",
        kind: "statement"};
 
   AI1ConversionMap["Type-Screen-OpenScreenAnimation"]
-    = {convert: convertUnimplemented, 
+    = {convert: convertUnimplemented,
        message: "Conversion of the generic form of Screen.OpenScreenAnimation has not been implemented.",
        kind: "statement"};
 
   AI1ConversionMap["Type-Screen-CloseScreenAnimation"]
-    = {convert: convertUnimplemented, 
+    = {convert: convertUnimplemented,
        message: "Conversion of the generic form of Screen.CloseScreenAnimation has not been implemented.",
        kind: "statement"};
 
   /* In Notifier component version 2, Notifier.ShowTextDialog and Notifier.ShowChooseDialog methods
      were changed to add an extra cancelable argument (defaults to false). We handle that common case here. */
   AI1ConversionMap["Notifier-ShowTextDialog"]
-    = {convert: convertNotifierDialogMethod, 
+    = {convert: convertNotifierDialogMethod,
        type: "component_method",
        kind: "statement"};
 
   AI1ConversionMap["Notifier-ShowChooseDialog"]
-    = {convert: convertNotifierDialogMethod, 
+    = {convert: convertNotifierDialogMethod,
        type: "component_method",
        kind: "statement"};
 
   AI1ConversionMap["Type-Notifier-ShowTextDialog"]
-    = {convert: convertGenericNotifierDialogMethod, 
+    = {convert: convertGenericNotifierDialogMethod,
        type: "component_method",
        kind: "statement"};
 
   AI1ConversionMap["Type-Notifier-ShowChooseDialog"]
-    = {convert: convertGenericNotifierDialogMethod, 
+    = {convert: convertGenericNotifierDialogMethod,
        type: "component_method",
        kind: "statement"};
 
@@ -2018,24 +2041,24 @@ function addComponentEntriesToAI1ConversionMap() {
     // Add component events to table
     var events = componentSpec.events;
     for (var j = 0, event; event = events[j]; j++) {
-      var eventName = event.name; 
+      var eventName = event.name;
       var hypenatedEventName = componentName + "-" + eventName; E.g., "Button-Click"
-      var paramNames = event.params.map(function (paramSpec) { return paramSpec.name; }); 
+      var paramNames = event.params.map(function (paramSpec) { return paramSpec.name; });
       AI1ConversionMap[hypenatedEventName] = {kind: "componentEvent", type:"component_event", "paramNames":paramNames};
-      // E.g.: "Button-Click": {kind: "componentEvent", type:"component_event", "paramNames":[]}, 
+      // E.g.: "Button-Click": {kind: "componentEvent", type:"component_event", "paramNames":[]},
     }
 
     // Add component methods to table
     var events = componentSpec.methods;
     for (var k = 0, method; method = methods[k]; k++) {
-      var methodName = method.name; 
+      var methodName = method.name;
       var hypenatedEventName = componentName + "-" + methodName; // E.g., "Ball-Bounce"
-      var paramNames = method.params.map(function (paramSpec) { return paramSpec.name; }); 
+      var paramNames = method.params.map(function (paramSpec) { return paramSpec.name; });
       var isExpression = Boolean(method.returnType);
-      AI1ConversionMap[hypenatedEventName] = {kind: "componentMethodCall", type:"component_method", 
+      AI1ConversionMap[hypenatedEventName] = {kind: "componentMethodCall", type:"component_method",
                                               "paramNames":paramNames, "isExpression": isExpression};
       // E.g.: "Clock-AddDays": {kind: "componentMethodCall", type:"component_method", "paramNames":["instant", "days"], "isExpression":true}
-      //       "Canvase-DrawCircle": {kind: "componentMethodCall", type:"component_method", 
+      //       "Canvase-DrawCircle": {kind: "componentMethodCall", type:"component_method",
       //                              "paramNames":["centerX", "centerY", "radius"], "isExpression":false}
     }
   }
@@ -2043,7 +2066,7 @@ function addComponentEntriesToAI1ConversionMap() {
 }
 
 // Actually add the component entries. Right now!
-addComponentEntriesToAI1ConversionMap(); 
+addComponentEntriesToAI1ConversionMap();
 
 var defaultConversionSpec = {kind: "unknown"};
 
@@ -2064,7 +2087,7 @@ function createElement (tag, attributeDict, children) {
 
 function appendChildren(block, children) {
   for (var i = 0, child; child = children[i]; i++) {
-    block.appendChild(child); 
+    block.appendChild(child);
   }
 }
 
@@ -2076,42 +2099,59 @@ function createFieldElement (name, text) {
 }
 
 function createTextNode(string) {
-  return goog.dom.createTextNode(string); 
+  return goog.dom.createTextNode(string);
 }
 
 function repairString (brokenString) {
-  // For reasons I don't understand, the text we get from XML is bad in two ways:
-  // (1) turns the two character '\n' into the three characters '\\n' 
+  // For reasons I don't understand, the text we get from AI1 XML is bad in four ways:
+  // (1) turns the two character '\n' into the three characters '\\n'
   // (2) turns the one character '/' into two characters '\/'
   // (3) turns the one character '"' into two characters '\"'
-  // We can fix these as follows: 
+  // (4) turns the one unicode character \uABCD into six characters
+  // We can fix these as follows:
   // console.log("Broken string is: '" + brokenString + "'");
   // fixedString = brokenString.replace(/\\\\n/g, '\\n'); // (1) replace three characters '\\n' by two characters '\n';
   // fixedString = text.replace(/\\\//g, '/');   // (2) convert '\/' to '/':
   // fixedString = text.replace(/\\"/g, '"');   // (3) convert '\"/' to '"':
   /* Can accomplish the above three steps as one regex: */
-  fixedString = brokenString.replace(/\\(\\n|\"|\/)/g, '$1');   // convert all above three. 
+  var partiallyFixedString = brokenString.replace(/\\(\\n|\"|\/)/g, '$1'); // convert first three of above four
+  var unicodeIndex = partiallyFixedString.indexOf("\\u");
+  var fixedString = "";
+  if (unicodeIndex == -1) {
+    var fixedString = partiallyFixedString;
+  } else {
+    var startIndex = 0;
+    while (unicodeIndex != -1) {
+      fixedString = fixedString + partiallyFixedString.slice(startIndex, unicodeIndex);
+      var hexUnicodeString = partiallyFixedString.slice(unicodeIndex + 2, unicodeIndex + 6);
+      assert(hexUnicodeString.length == 4, "repairString encountered unicode char with " + hexUnicodeString.length + " characters");
+      fixedString = fixedString + String.fromCharCode(parseInt(hexUnicodeString, 16));
+      startIndex = unicodeIndex + 6;
+      unicodeIndex = partiallyFixedString.indexOf("\\u", startIndex); // look for next unicode character
+    }
+    fixedString = fixedString + partiallyFixedString.slice(startIndex, partiallyFixedString.length);
+  }
   // console.log("Fixed string is: '" + fixedString + "'");
   return fixedString;
 }
 
-// Return the Id of block connected via socket with given label. 
-// Returns undefined if this socket is empty or there is no such socket. 
+// Return the Id of block connected via socket with given label.
+// Returns undefined if this socket is empty or there is no such socket.
 /*
 function getSocketLabelId (label, block) {
-  var connectors = block.getElementsByTagName("BlockConnector"); 
+  var connectors = block.getElementsByTagName("BlockConnector");
   for (var i = 0, connector; connector = connectors[i]; i++) {
     if (connector.getAttribute("label") == label) {
       var conId = connector.getAttribute("con-block-id");
-      return conId; // may be undefined? 
+      return conId; // may be undefined?
     }
   }
-  throw "getSocketLabelId: no socket with label " + label; 
+  throw "getSocketLabelId: no socket with label " + label;
 }
 */
 
-// Return the Id of block connected via socket with given label. 
-// Returns null if this socket is empty or there is no such socket. 
+// Return the Id of block connected via socket with given label.
+// Returns null if this socket is empty or there is no such socket.
 function getSocketLabelId (label, block) {
   var connectors = getSocketBlockConnectors(block);
   for (var i = 0, connector; connector = connectors[i]; i++) {
@@ -2120,25 +2160,25 @@ function getSocketLabelId (label, block) {
       return conId; // will be null if no con-block-id attribute
     }
   }
-  throw new Error("getSocketLabelId: no socket with label " + label); 
+  throw new Error("getSocketLabelId: no socket with label " + label);
 }
 
-// Return an array of the Ids of all expression socket block connectors. 
+// Return an array of the Ids of all expression socket block connectors.
 // Uses null in place of an Id for an empty socket
 function getExpressionSocketIds (block) {
   var connectors = getExpressionSocketBlockConnectors(block);
   return connectors.map(function (connector) { return connector.getAttribute("con-block-id"); });
   // When getSocketBlockConnectors(block) returned an HTMLCollection rather than array, this was necessary
   /*
-  ids = []; 
+  ids = [];
   for (var i = 0, connector; connector = connectors[i]; i++) {
     ids.push(connector.getAttribute("con-block-id"));
-  }  
-  return ids; 
+  }
+  return ids;
   */
 }
 
-// Return an array of the Ids of all expression socket block connectors that are expandable. 
+// Return an array of the Ids of all expression socket block connectors that are expandable.
 // Uses null in place of an Id for an empty socket
 function getExpandableExpressionSocketIds (block) {
   var connectors = getExpressionSocketBlockConnectors(block);
@@ -2146,7 +2186,7 @@ function getExpandableExpressionSocketIds (block) {
   return expandables.map(function (expandable) { return expandable.getAttribute("con-block-id"); });
 }
 
-// Return an array of the Ids of all expression socket block connectors that are not expandable. 
+// Return an array of the Ids of all expression socket block connectors that are not expandable.
 // Uses null in place of an Id for an empty socket
 function getNonexpandableExpressionSocketIds (block) {
   var connectors = getExpressionSocketBlockConnectors(block);
@@ -2159,38 +2199,38 @@ function getSocketOutputTagForId(childId, parentBlock) {
   var connectors = getSocketBlockConnectors(parentBlock);
   for (var i = 0, connector; connector = connectors[i]; i++) {
     if (connector.getAttribute("con-block-id") == childId) {
-	connectorType = connector.getAttribute("connector-type");
+        connectorType = connector.getAttribute("connector-type");
       if (connectorType == "poly") { // it's an expression
-	return "value";
+        return "value";
       } else if (connectorType == "cmd") { // it's a statement
-	return "statement";
+        return "statement";
       } else {
-	throw new Error("getSocketOutputTagForId: unrecognized connectorType " + connectorType); 
+        throw new Error("getSocketOutputTagForId: unrecognized connectorType " + connectorType);
       }
     }
   }
   return undefined; // Didn't find id
 }
 
-// Return an array of the labels of all expression socket block connectors. 
+// Return an array of the labels of all expression socket block connectors.
 function getExpressionSocketLabels (block) {
   var connectors = getExpressionSocketBlockConnectors(block);
   return connectors.map(function (connector) { return connector.getAttribute("label"); });
 }
 
 function getExpressionSocketBlockConnectors (block) {
-  var connectors = getSocketBlockConnectors(block); 
-  return connectors.filter(function (connector) { return connector.getAttribute("connector-type") == "poly"; }); 
+  var connectors = getSocketBlockConnectors(block);
+  return connectors.filter(function (connector) { return connector.getAttribute("connector-type") == "poly"; });
 }
 
 function getStatementSocketBlockConnectors (block) {
-  var connectors = getSocketBlockConnectors(block); 
-  return connectors.filter(function (connector) { return connector.getAttribute("connector-type") == "cmd"; }); 
+  var connectors = getSocketBlockConnectors(block);
+  return connectors.filter(function (connector) { return connector.getAttribute("connector-type") == "cmd"; });
 }
 
 // Returns a array (not an HTMLCollection) of all socket BlockConnectors,
 // both for expression sockets (connector-type="poly") and statement-sockets
-// (connector-type="cmd"). 
+// (connector-type="cmd").
 function getSocketBlockConnectors (block) {
   var socketLists = block.getElementsByTagName("Sockets");
   if (socketLists.length == 0) {
@@ -2198,14 +2238,14 @@ function getSocketBlockConnectors (block) {
   } else if (socketLists.length == 1) { // This is the expected case
     var socketsElt = socketLists[0];
     var declaredNumSockets = parseInt(socketsElt.getAttribute("num-sockets"));
-    var connectors = socketsElt.getElementsByTagName("BlockConnector"); 
+    var connectors = socketsElt.getElementsByTagName("BlockConnector");
     if (connectors.length != declaredNumSockets) {
-      throw new Error("getSocketBlockConnectors: declared number of sockets " + declaredNumSockets 
+      throw new Error("getSocketBlockConnectors: declared number of sockets " + declaredNumSockets
                       + " does not match actual number of sockets " + connectors.length);
     } else {
       // Convert from an HTMLCollection to an array, since other ops
-      // need to use this result as an array (e.g., to map or filter it). 
-      var result = []; 
+      // need to use this result as an array (e.g., to map or filter it).
+      var result = [];
       for (var i = 0; i < connectors.length; i++) {
         result.push(connectors[i]);
       }
@@ -2226,7 +2266,7 @@ function getNextId (block) {
       throw new Error("getNextId did not have text child");
     }
   } else {
-    return undefined; // default if no next element. 
+    return undefined; // default if no next element.
   }
 }
 
@@ -2235,16 +2275,16 @@ function getChildByTagName (tag, block) {
   // console.log(block);
   var elts = block.getElementsByTagName(tag); // Only works in AI1 because blocks aren't nested!
                                               // Otherwise, could get descendents further down tree from child
-                                              // That match tag. 
+                                              // That match tag.
   if (elts.length == 0) {
-    return undefined; 
+    return undefined;
   } else { // return the first
     return elts[0];
   }
 }
 
 function getLocation (block) {
-  var result = {"x": undefined, "y": undefined}; 
+  var result = {"x": undefined, "y": undefined};
   var locationElt = getChildByTagName("Location", block);
   if (location) {
     result.x = getElementText(getChildByTagName("X", locationElt));
@@ -2261,17 +2301,17 @@ function getLabelText (block) {
 }
 
 function getElementText (elt) {
-  if (elt) { 
+  if (elt) {
     var textNode = elt.firstChild;
     if (! textNode) {
       return ""; // Needed to handle empty Text blocks in AI1
     } else if (textNode.nodeName == "#text") {
-      return textNode.nodeValue;      
+      return textNode.nodeValue;
     } else {
       throw new Error("getElementText did not have text child");
     }
   } else {
-    return ""; // If no element, still return empty string 
+    return ""; // If no element, still return empty string
   }
 }
 
@@ -2285,12 +2325,14 @@ function getBlock(blockOrStub) {
   } else if (tag == "BlockStub") {
     return blockStubBlock(blockOrStub);
   } else {
-    throw new Error("getBlock encountered element with unexpected tag " + tag); 
+    throw new Error("getBlock encountered element with unexpected tag " + tag);
   }
 }
 
 function blockStubBlock(stub) {
-  var children = stub.children;
+  // [lyn, 06/29/2015] Use goog.dom.getChildren rather than .children (which does not work in all browsers
+  // var children = stub.children;
+  var children = goog.dom.getChildren(stub);
   for (var i = 0, child; child = children[i]; i++) {
     if (child.tagName == "Block") {
       return child;
@@ -2301,8 +2343,8 @@ function blockStubBlock(stub) {
 
 function getFirstElementChild(tag, dom) {
   if (dom && dom.firstElementChild && dom.firstElementChild.nodeName) {
-    var lowerName = dom.firstElementChild.nodeName.toLowerCase(); 
-    var lowerTag = tag.toLowerCase(); 
+    var lowerName = dom.firstElementChild.nodeName.toLowerCase();
+    var lowerTag = tag.toLowerCase();
     if (lowerName == lowerTag) {
       return dom.firstElementChild;
     } else {
@@ -2316,16 +2358,16 @@ function getFirstElementChild(tag, dom) {
 var preCommentTags = ["mutation", "field"];
 
 // Handle the ickiness of inserting a comment element in a block;
-// I must go after any mutation and field elements. 
+// I must go after any mutation and field elements.
 function insertComment (blockElt, commentElt) {
   // First, find the insertion point, which is the index after
-  // all children with tags MUTATION and FIELD. 
+  // all children with tags MUTATION and FIELD.
   var children = goog.dom.getChildren(blockElt);
   var numChildren = children.length;
   if (numChildren == 0) {
     blockElt.appendChild(commentElt); // Add as first child
   }
-  var insertionIndex = 0; 
+  var insertionIndex = 0;
   while (insertionIndex < numChildren && preCommentTags.indexOf(children[insertionIndex].tagName.toLowerCase()) >= 0) {
     insertionIndex++;
   }
@@ -2370,8 +2412,8 @@ function domToPrettyText (dom) {
   // Indent every line.
   var indent = '';
   for (var x = 1; x < lines.length; x++) {
-    var line = lines[x]; 
-    // var line = lines[x].trim(); // *** Lyn sez: need to trim here, else terminal newline screws up check for '/>' 
+    var line = lines[x];
+    // var line = lines[x].trim(); // *** Lyn sez: need to trim here, else terminal newline screws up check for '/>'
                                 // and adds extra blank line between lines
     // [lyn, 2015/06/12] Above trimming is too agressive, and removes trailing newlines from text fields!
     // Instead, just remove last character if it's a newline
@@ -2408,7 +2450,7 @@ function domToText (dom) {
 /*
 // Replace this by reportError from ai1ConvertZip.js
 function appdendError (msg) {
-  document.getElementById('errors').innerHTML = 
+  document.getElementById('errors').innerHTML =
     document.getElementById('errors').innerHTML + "<br>" + msg;
 }
 */
@@ -2440,7 +2482,7 @@ function range(lo, hi) {
   for (var n = lo; n < hi; n++) {
     nums.push(n);
   }
-  return nums; 
+  return nums;
 }
 
 function sameNames(names1, names2) {
@@ -2453,7 +2495,7 @@ function sameNames(names1, names2) {
       }
     }
   }
-  return true; 
+  return true;
 }
 
 // return string representation of array of strings
@@ -2466,23 +2508,23 @@ var orphanedArgName = "*orphanedArg";
 
 function nameNotInValues(varMap) {
   var orphanedValues = objectValues(varMap).filter(function (name) { return beginsWith(name, orphanedArgName); });
-  var i = 1; 
+  var i = 1;
   var nextName = orphanedArgName; // Initial name has no number
   while (orphanedValues.indexOf(nextName) != -1) {
     i++;
     nextName = orphanedArgName + i;  // Subsequent names have numbers
   }
-  return nextName; // First name that's not in list. 
+  return nextName; // First name that's not in list.
 }
 
 function objectValues(obj) {
   var keys = Object.keys(obj);
-  return keys.map(function (key) { return obj[key]; }); 
+  return keys.map(function (key) { return obj[key]; });
 }
 
 function beginsWith(string, prefix) {
-  if (prefix.length > string.length) { 
-    return false; 
+  if (prefix.length > string.length) {
+    return false;
   } else {
     return string.slice(0, prefix.length) == prefix;
   }
@@ -2494,10 +2536,10 @@ function blockLabelsAndIdsToString(ids, inputIdMap) {
       var blockLabel = "UnknownBlock"; // default
       if (block) {
         blockLabel = getLabelText(block);
-      } 
+      }
       return blockLabel + " (id=" + id + ")";
     });
-  return strings.join(", "); 
+  return strings.join(", ");
 }
 
 // From http://stackoverflow.com/questions/15313418/javascript-assert

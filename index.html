@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)http://cs.wellesley.edu/~fturbak/ai1convert_v1.1/ -->
+<!-- saved from url=(0049)http://cs.wellesley.edu/~fturbak/ai1convert_v1.2/ -->
 <html style=""><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta charset="utf-8">
     <title>AI1 to AI2 Converter</title>
@@ -17,6 +17,22 @@
       <p><button id="instructionsButton" class="converterButton">Show Instructions</button>
 
       </p><div id="instructions" style="display: none;">
+
+      <p> This tool converts App Inventor Classic (AI1) project source files (<code>.zip</code> files) 
+          to App Inventor 2 (AI2) project source files (<code>.ai1</code> files). 
+          <strong>Warning: This browser-based tool currently works only in Chrome and Firefox.
+          In particular, it does not work in Safari or Internet Explorer.</strong>
+
+      </p><p> Due to circumstances beyond the control of the App Inventor development team, 
+          the <a href="http://beta.appinventor.mit.edu/">App Inventor Classic (AI1) development environment</a>
+          will shut down on <strong>July 15, 2015</strong>. 
+          <a href="http://explore.appinventor.mit.edu/classic">See the AI1 shutdown details here.</a>
+          It will not be possible to access your AI1 projects
+          after that time. If you wish to save these projects, now is the time to 
+          (1) download any AI1 projects you care about and (2) convert them to AI2 projects using this tool. 
+
+      </p><h3>Instructions</h3>
+
       <ol>
         <li> In the <a href="http://beta.appinventor.mit.edu/">App Inventor Classic (AI1) development environment</a>, 
              load the project you wish to convert, and confirm that you can view it in both the Designer
@@ -116,13 +132,21 @@
       </p><div id="issues" style="display: none;">
         <h2>Known Issues</h2>
         <ul>
-          <li> The converter does not yet correctly handle unicode characters. 
+          <li> This converter only works in Chrome and Firefox. It does not work in other browsers, 
+               such as Safari and Internet Explorer. 
         </li></ul>
       </div>
 
       <p><button id="versionsButton" class="converterButton">Show Version Notes</button>
       </p><div id="versions" style="display: none;">
         <h2>Version Notes</h2>
+        <h3>Version 1.2</h3>
+        <ul>
+          <li> The converter now handles strings with unicode characters. 
+          </li><li> The converter will now automatically rename the <code>ImagePicker.ImagePath</code> property 
+               in old versions of <code>ImagePicker</code> to <code>ImagePicker.Selection</code>.
+        </li></ul>
+
         <h3>Version 1.1</h3>
         <ul>
           <li> Bugs in the conversion of the math blocks <code>atan2</code> and <code>random set seed</code> were fixed. 

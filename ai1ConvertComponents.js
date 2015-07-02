@@ -169,6 +169,7 @@ var componentVersionUpdateMap
   // Converter *could* do this rename, but currently doesn't. 
   "EmailPicker": {minUpdatableVersion: 2, updatedVersion: 3}, 
 
+  // Converter renames ImagePicker.ImagePath to ImagePicker.Selection in version 5
   // Alignment property renamed to TextAlignment in version 2. 
   // Converter *could* do this rename, but currently doesn't. 
   "ImagePicker": {minUpdatableVersion: 2, updatedVersion: 5}, 
